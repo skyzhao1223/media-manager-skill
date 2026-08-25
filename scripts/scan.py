@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""深度扫描极空间 NAS 影视目录 —— 正向验证版。
+"""影视目录命名正向校验 —— 通用版（本地 / 极空间皆可）。
 
 核心思路：不是检测"脏模式"，而是验证每个文件/目录是否符合规范。
 任何不匹配规范格式的，全部输出。这样不会漏掉任何问题。
 
 Usage:
-    python scan.py [root_path]
-    python scan.py                           # 默认 /sata11/my/data/影视
-    python scan.py /sata11/my/data/影视/电影  # 只扫电影
+    python scan.py [root_path]                  # 默认扫本地当前影视目录
+    python scan.py --source zspace /sata11/my/data/影视   # 扫极空间
+    python scan.py --source local /path/to/影视  # 扫本地目录
+    python scan.py --json /path/to/影视 > issues.json
 """
 
 import re
 import sys
 import json
-from zspace_cli import ZSpaceClient
+import os
 
 DEFAULT_ROOT = '/sata11/my/data/影视'
 MAX_DEPTH = 8
@@ -123,9 +124,27 @@ PLACEHOLDER_ENGLISH = re.compile(
 )
 
 
-# ── 递归遍历（处理分页） ──────────────────────────────────
+# ── 数据源遍历 ────────────────────────────────────────────
 
-def scan_all(client, path, depth=0):
+def walk_local(root, depth=0):
+    """遍历本地文件系统目录。"""
+    if depth > MAX_DEPTH:
+        return
+    try:
+        entries = sorted(os.scandir(root), key=lambda e: e.name)
+    except OSError:
+        return
+    for entry in entries:
+        name = entry.name
+        item_path = os.path.join(root, name)
+        is_dir = entry.is_dir()
+        yield {'path': item_path, 'name': name, 'is_dir': is_dir, 'depth': depth}
+        if is_dir:
+            yield from walk_local(item_path, depth + 1)
+
+
+def walk_zspace(client, path, depth=0):
+    """遍历极空间 NAS 目录（zspace-cli 数据源，处理 50 条分页）。"""
     if depth > MAX_DEPTH:
         return
     start = 0
@@ -146,7 +165,7 @@ def scan_all(client, path, depth=0):
             is_dir = str(item.get('is_dir', '0')) == '1'
             yield {'path': item_path, 'name': name, 'is_dir': is_dir, 'depth': depth}
             if is_dir:
-                yield from scan_all(client, item_path, depth + 1)
+                yield from walk_zspace(client, item_path, depth + 1)
         if len(items) < 50:
             break
         start += 50
@@ -270,85 +289,110 @@ def validate(item, root):
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="影视目录命名正向校验（极空间）")
+    parser = argparse.ArgumentParser(description="影视目录命名正向校验（本地 / 极空间）")
     parser.add_argument(
         "root",
         nargs="?",
-        default=DEFAULT_ROOT,
-        help=f"扫描根目录（默认 {DEFAULT_ROOT}）",
+        default=None,
+        help="扫描根目录（--source local 时必填；--source zspace 默认 /sata11/my/data/影视）",
+    )
+    parser.add_argument(
+        "--source",
+        choices=("local", "zspace"),
+        default="local",
+        help="数据源：local=本地目录（默认），zspace=极空间 NAS（需 zspace-cli）",
     )
     parser.add_argument("--json", action="store_true", help="stdout 输出 JSON")
     args = parser.parse_args()
-    root = args.root
     output_json = args.json
 
-    with ZSpaceClient() as c:
-        print(f'正在扫描 {root} ...\n', file=sys.stderr)
+    if args.source == "zspace":
+        # 惰性导入，仅在需要极空间时才要求 zspace-cli
+        try:
+            from zspace_cli import ZSpaceClient
+        except ImportError:
+            print("✗ --source zspace 需要先安装 zspace-cli: pip install zspace-cli", file=sys.stderr)
+            sys.exit(1)
+        root = args.root or DEFAULT_ROOT
+        with ZSpaceClient() as c:
+            scan_all = walk_zspace(c, root)
+            _run(scan_all, validate, root, output_json, repeat_source=lambda: walk_zspace(c, root))
+    else:
+        root = args.root or "."
+        if not os.path.isdir(root):
+            print(f"✗ 目录不存在: {root}", file=sys.stderr)
+            sys.exit(1)
+        scan_all = walk_local(root)
+        _run(scan_all, validate, root, output_json, repeat_source=lambda: walk_local(root))
 
-        stats = {'dirs': 0, 'files': 0}
-        issues = []
 
-        for item in scan_all(c, root):
-            if item['is_dir']:
-                stats['dirs'] += 1
-            else:
-                stats['files'] += 1
+def _run(scan_all, validate, root, output_json, repeat_source):
+    print(f'正在扫描 {root} ...\n', file=sys.stderr)
 
-            problems = validate(item, root)
-            if problems:
-                rel = item['path'].replace(root + '/', '')
+    stats = {'dirs': 0, 'files': 0}
+    issues = []
+
+    for item in scan_all:
+        if item['is_dir']:
+            stats['dirs'] += 1
+        else:
+            stats['files'] += 1
+
+        problems = validate(item, root)
+        if problems:
+            rel = item['path'].replace(root + '/', '')
+            issues.append({
+                'path': rel,
+                'name': item['name'],
+                'is_dir': item['is_dir'],
+                'problems': problems,
+            })
+
+    print(f'扫描完成: {stats["dirs"]} 目录, {stats["files"]} 文件\n', file=sys.stderr)
+
+    if output_json:
+        json.dump(issues, sys.stdout, ensure_ascii=False, indent=2)
+        return
+
+    if not issues:
+        print('✅ 全部合规，零问题！')
+        return
+
+    # 重复资源检测（基于中文名去重）
+    dir_names = {}
+    for item in repeat_source():
+        if item['is_dir'] and item['path'].count('/') == root.count('/') + 2:
+            name = item['name']
+            base = re.sub(r'\s*\[.*?\]', '', name)
+            base = re.sub(r'\s*\(副本\d?\)', '', base)
+            dir_names.setdefault(base, []).append(name)
+
+    for base, names in dir_names.items():
+        if len(names) > 1:
+            for n in names:
                 issues.append({
-                    'path': rel,
-                    'name': item['name'],
-                    'is_dir': item['is_dir'],
-                    'problems': problems,
+                    'path': n,
+                    'name': n,
+                    'is_dir': True,
+                    'problems': [f'疑似重复资源({len(names)}个)'],
                 })
 
-        print(f'扫描完成: {stats["dirs"]} 目录, {stats["files"]} 文件\n', file=sys.stderr)
+    # 按问题类型分组
+    by_type = {}
+    for issue in issues:
+        for p in issue['problems']:
+            by_type.setdefault(p, []).append(issue)
 
-        if output_json:
-            json.dump(issues, sys.stdout, ensure_ascii=False, indent=2)
-            return
+    print(f'⚠  发现 {len(issues)} 个问题项:\n')
 
-        if not issues:
-            print('✅ 全部合规，零问题！')
-            return
-
-        # 重复资源检测（基于中文名去重）
-        dir_names = {}
-        for item in scan_all(c, root, depth=0):
-            if item['is_dir'] and item['path'].count('/') == root.count('/') + 2:
-                name = item['name']
-                base = re.sub(r'\s*\[.*?\]', '', name)
-                base = re.sub(r'\s*\(副本\d?\)', '', base)
-                dir_names.setdefault(base, []).append(name)
-
-        for base, names in dir_names.items():
-            if len(names) > 1:
-                for n in names:
-                    issues.append({
-                        'path': n,
-                        'name': n,
-                        'is_dir': True,
-                        'problems': [f'疑似重复资源({len(names)}个)'],
-                    })
-
-        # 按问题类型分组
-        by_type = {}
-        for issue in issues:
-            for p in issue['problems']:
-                by_type.setdefault(p, []).append(issue)
-
-        print(f'⚠  发现 {len(issues)} 个问题项:\n')
-
-        for ptype, items in sorted(by_type.items(), key=lambda x: -len(x[1])):
-            print(f'【{ptype}】{len(items)} 项')
-            for item in items[:8]:
-                tag = '📁' if item['is_dir'] else '  '
-                print(f'  {tag} {item["path"]}')
-            if len(items) > 8:
-                print(f'  ... 还有 {len(items) - 8} 项')
-            print()
+    for ptype, items in sorted(by_type.items(), key=lambda x: -len(x[1])):
+        print(f'【{ptype}】{len(items)} 项')
+        for item in items[:8]:
+            tag = '📁' if item['is_dir'] else '  '
+            print(f'  {tag} {item["path"]}')
+        if len(items) > 8:
+            print(f'  ... 还有 {len(items) - 8} 项')
+        print()
 
 
 if __name__ == '__main__':

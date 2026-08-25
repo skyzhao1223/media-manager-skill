@@ -39,14 +39,15 @@ description: >-
 ### Step 1: 扫描
 
 ```bash
-# 本地目录
-python scripts/scan.py /path/to/影视
+# 本地目录（mm-scan 需 pip install media-manager-skill；或直接跑仓库内脚本）
+mm-scan --source local /path/to/影视
+python scripts/scan.py --source local /path/to/影视
 
 # 极空间 NAS（需 zspace-cli）
-python scripts/scan.py --source zspace /sata11/my/data/影视
+mm-scan --source zspace /sata11/my/data/影视
 
 # JSON 输出（供后续处理）
-python scripts/scan.py --json /path/to/影视 > /tmp/issues.json
+mm-scan --json /path/to/影视 > /tmp/issues.json
 ```
 
 ### Step 2: 修复

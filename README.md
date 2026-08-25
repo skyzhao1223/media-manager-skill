@@ -1,6 +1,6 @@
-# media-manager
+# media-manager-skill
 
-**影视库命名扫描与整理** — 深度扫描 + `old→new` 预览 + rename/move。**本地影音库、云盘（网盘）、各类 NAS（极空间 / 群晖 / 威联通 …）都支持**。
+**影视库命名扫描与整理 Agent Skill** — 深度扫描 + `old→new` 预览 + rename/move。**本地影音库、云盘（网盘）、各类 NAS（极空间 / 群晖 / 威联通 …）都支持**。
 
 > 命名规范来自 [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide)。  
 > 核心校验逻辑是纯 Python，与存储后端无关；NAS 通过适配器接入（如极空间走 [zspace-cli](https://github.com/skyzhao1223/zspace-cli)）。
@@ -20,19 +20,30 @@
 
 ---
 
+## 安装
+
+```bash
+pip install media-manager-skill          # 本地模式，零依赖
+pip install "media-manager-skill[zspace]"  # 极空间模式（带上 zspace-cli）
+
+# 命令行入口
+mm-scan --source local /path/to/影视
+```
+
+> 不安装直接跑脚本也行：`python scripts/scan.py --source local /path/to/影视`（本仓库即含完整实现）。
+
 ## 快速开始
 
 ```bash
 # 本地目录（默认）
-python scripts/scan.py /path/to/影视
+mm-scan --source local /path/to/影视
 
-# 极空间 NAS（需 zspace-cli）
-pip install zspace-cli
+# 极空间 NAS
 zs check
-python scripts/scan.py --source zspace /sata11/my/data/影视
+mm-scan --source zspace /sata11/my/data/影视
 
 # JSON 输出（供后续处理）
-python scripts/scan.py --json /path/to/影视 > /tmp/issues.json
+mm-scan --json /path/to/影视 > /tmp/issues.json
 ```
 
 ## 它能做什么
@@ -41,6 +52,10 @@ python scripts/scan.py --json /path/to/影视 > /tmp/issues.json
 - 识别：命名不规范、水印/站点标签、审查规避字符、占位符、文件/文件夹名不匹配、重复资源等问题
 - 输出 `old→new` **预览映射表**，确认后再批量 rename / move
 - 数据源可插拔：本地文件系统（默认）或极空间 NAS（`--source zspace`）
+
+## 搭配使用
+
+与 **Jellyfin / Emby / MoviePilot / nas-tools / 极影视** 搭配：入库或刮削前先扫描一遍，把命名问题一次暴露，避免刮削失败。见 [docs/integrations.md](docs/integrations.md)。
 
 ## 作为 Agent Skill
 
@@ -53,10 +68,15 @@ cp -r SKILL.md scripts ~/your-project/skills/media-manager/
 ## 目录结构
 
 ```
-media-manager/
+media-manager-skill/
 ├── SKILL.md          # Agent skill 主文件（工作流 + 踩坑）
-└── scripts/
-    └── scan.py       # 命名扫描脚本（本地默认 + 极空间适配；其他后端可自行接入）
+├── scripts/
+│   └── scan.py       # 薄封装（同一份核心代码，不装包也能跑）
+├── src/
+│   └── media_manager_skill/
+│       └── scan.py   # 核心实现（pip 安装后由 mm-scan 调用）
+└── docs/
+    └── integrations.md  # 与 Jellyfin / MoviePilot / 极影视等搭配使用
 ```
 
 ## 原理与限制

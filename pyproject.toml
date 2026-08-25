@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "media-manager-skill"
+version = "0.1.0"
+description = "影视库命名扫描与整理 Agent Skill — 深度扫描 + old→new 预览 + rename/move（本地 / 云盘 / 各类 NAS）"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [
+    { name = "skyzhao1223" },
+]
+keywords = ["media", "movie", "tv", "nas", "jellyfin", "moviepilot", "影视", "整理", "命名", "skill"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Utilities",
+]
+
+# 极空间数据源是可选依赖；本地模式零依赖
+[project.optional-dependencies]
+zspace = ["zspace-cli>=0.1.0"]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+mm-scan = "media_manager_skill.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/skyzhao1223/media-manager-skill"
+Repository = "https://github.com/skyzhao1223/media-manager-skill"
+Issues = "https://github.com/skyzhao1223/media-manager-skill/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

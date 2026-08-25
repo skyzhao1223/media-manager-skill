@@ -1,9 +1,22 @@
 # media-manager
 
-**影视库命名扫描与整理** — 深度扫描 + `old→new` 预览 + rename/move。本地目录和极空间（ZSpace）NAS 都支持。
+**影视库命名扫描与整理** — 深度扫描 + `old→new` 预览 + rename/move。**本地影音库、云盘（网盘）、各类 NAS（极空间 / 群晖 / 威联通 …）都支持**。
 
 > 命名规范来自 [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide)。  
-> 极空间数据源走 [zspace-cli](https://github.com/skyzhao1223/zspace-cli)（零配置访问）。
+> 核心校验逻辑是纯 Python，与存储后端无关；NAS 通过适配器接入（如极空间走 [zspace-cli](https://github.com/skyzhao1223/zspace-cli)）。
+
+---
+
+## 支持的场景
+
+| 场景 | 数据源 | 说明 |
+|------|--------|------|
+| 本地影音库 | `--source local`（默认） | 纯 Python，扫本地目录，零依赖 |
+| 极空间 NAS | `--source zspace` | 走 [zspace-cli](https://github.com/skyzhao1223/zspace-cli) 读桌面客户端登录态 |
+| 其他 NAS（群晖/威联通等） | 挂载 + 本地模式 | 挂载成本地盘符/目录，直接用 `--source local` |
+| 云盘 / 网盘 | 挂载 + 本地模式 | rclone / WebDAV 等挂载为本地目录后用 `--source local` |
+
+> 只要能把目录列成 `{path, name, is_dir}` 就能用本扫描器。挂载成本地目录是最简单的接入方式。
 
 ---
 
@@ -43,13 +56,14 @@ cp -r SKILL.md scripts ~/your-project/skills/media-manager/
 media-manager/
 ├── SKILL.md          # Agent skill 主文件（工作流 + 踩坑）
 └── scripts/
-    └── scan.py       # 命名扫描脚本（本地 / 极空间双数据源）
+    └── scan.py       # 命名扫描脚本（本地默认 + 极空间适配；其他后端可自行接入）
 ```
 
 ## 原理与限制
 
-- 核心校验逻辑是纯 Python（正则 + 规则），不绑定任何 NAS
+- 核心校验逻辑是纯 Python（正则 + 规则），**与存储后端无关**——本地、云盘、各类 NAS 都可用
 - 极空间模式通过 zspace-cli 读桌面客户端登录态访问文件 API，需 macOS 桌面客户端在线
+- 其他 NAS / 云盘：挂载为本地目录即可用 `--source local`，或写一个十几行的遍历适配器接入
 - 命名规范来自 [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide)
 - 非官方项目，仅面向**本人账号、个人影视库**
 

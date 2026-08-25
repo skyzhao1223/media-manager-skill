@@ -1,19 +1,32 @@
 ---
 name: media-manager
 description: >-
-  Organize movies and TV series on a NAS or local disk. Deep-scan a media
-  library against naming conventions, preview old→new changes, then rename/move.
-  Naming conventions live in media-naming-guide; works with local folders or
-  ZSpace (极空间) NAS via zspace-cli.
-  Use when 影视整理, 影视命名扫描, media library organize, media rename, NAS 影视管理.
+  Organize movies and TV series across many storage backends: local disk,
+  cloud drives (网盘), or NAS (极空间/ZSpace, 群晖, 威联通, etc.). Deep-scan a
+  media library against naming conventions, preview old→new changes, then
+  rename/move. Naming conventions live in media-naming-guide; a generic
+  scanner walks local folders, and NAS sources plug in via adapters (e.g.
+  ZSpace via zspace-cli).
+  Use when 影视整理, 影视命名扫描, media library organize, media rename, NAS 影视管理, 网盘影视整理.
 ---
 
 # 影视文件管理
 
-先扫描影视库（本地目录或极空间 NAS），按 [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide) 规范校验命名，出 `old→new` 预览，再执行 rename/move。
+跨存储后端整理影视库：**本地目录、云盘（网盘）、各类 NAS（极空间 / 群晖 / 威联通 …）**。按 [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide) 规范校验命名，出 `old→new` 预览，再执行 rename/move。
 
 > **命名规范**见 [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide)  
-> **数据源**：本地目录（默认）或极空间 NAS（`--source zspace`，走 zspace-cli）。
+> **数据源**：本地目录（默认，通用）；NAS 走适配器（如极空间 `--source zspace` 用 zspace-cli）。其他 NAS / 云盘可自行接一个「目录遍历器」即可复用全部校验逻辑。
+
+## 支持的场景
+
+| 场景 | 数据源 | 说明 |
+|------|--------|------|
+| 本地影音库 | `--source local`（默认） | 纯 Python，扫本地目录，零依赖 |
+| 极空间 NAS | `--source zspace` | 走 [zspace-cli](https://github.com/skyzhao1223/zspace-cli) 读桌面客户端登录态 |
+| 其他 NAS（群晖/威联通等） | 自行接入 | 挂载成本地盘符/目录后即可用本地模式，或写个十几行的遍历适配器 |
+| 云盘 / 网盘 | 自行接入 | 挂载为本地目录（如 rclone/WebDAV 挂载）后即用本地模式 |
+
+> 核心校验逻辑是**纯 Python、与存储后端无关**。只要能把目录列成 `{path, name, is_dir}`，就能用本扫描器。挂载成本地目录是最简单的接入方式。
 
 ## Prerequisites
 

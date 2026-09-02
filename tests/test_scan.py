@@ -53,7 +53,7 @@ def test_walk_local_recursive(tmp_path: Path):
 def test_tr_localizes_codes():
     assert tr("JUNK_FILE", "zh") == "垃圾文件"
     assert tr("JUNK_FILE", "en") == "Junk file"
-    assert tr("DUPLICATE", "en", n=3) == "Possible duplicate (3 copies)"
+    assert tr("DUPLICATE", "en") == "Possible duplicate"
 
 
 def test_detect_lang():
@@ -356,6 +356,16 @@ def test_find_duplicates(tmp_path: Path):
     assert all(d["dupe_count"] == 2 for d in dups)
 
 
+def test_find_duplicates_keeps_year_distinct(tmp_path: Path):
+    # 同名不同年份是两部电影，不应判重复
+    root = str(tmp_path)
+    dirs = [
+        {"path": f"{root}/电影/哥斯拉 (1998)", "name": "哥斯拉 (1998)", "is_dir": True, "depth": 2},
+        {"path": f"{root}/电影/哥斯拉 (2014)", "name": "哥斯拉 (2014)", "is_dir": True, "depth": 2},
+    ]
+    assert find_duplicates(lambda: iter(dirs), root) == []
+
+
 # ── old→new 建议 ────────────────────────────────────────
 
 
@@ -411,6 +421,28 @@ def test_enrich_new_name_clean_watermark():
         "problems": ["WATERMARK"],
     }
     assert enrich_new_name(issue, "root") == "煎饼侠 Jian Bing Man (2015).mkv"
+
+
+def test_enrich_new_name_plex_episode_uses_show_not_season():
+    # plex 结构 TV Shows/Show/Season 01/file —— 剧名取 Show 而非 Season 01
+    issue = {
+        "path": "TV Shows/Breaking Bad/Season 01/three.body.S01E01.mkv",
+        "name": "three.body.S01E01.mkv",
+        "is_dir": False,
+        "problems": ["SERIES_VIDEO_NAME"],
+    }
+    assert enrich_new_name(issue, "root", profile_key="plex") == "Breaking Bad S01E01.mkv"
+
+
+def test_enrich_new_name_plex_flat_episode(tmp_path: Path):
+    # plex 单季无 Season 层：TV Shows/Show/file
+    issue = {
+        "path": "TV Shows/Breaking Bad/s01e01.mkv",
+        "name": "s01e01.mkv",
+        "is_dir": False,
+        "problems": ["SERIES_VIDEO_NAME"],
+    }
+    assert enrich_new_name(issue, "root", profile_key="plex") == "Breaking Bad S01E01.mkv"
 
 
 # ── JSON 输出包含重复资源与码（回归） ───────────────────

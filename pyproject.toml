@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "media-manager-skill"
-version = "0.2.0"
-description = "影视库命名扫描与整理 Agent Skill — 深度扫描 + old→new 预览 + rename/move（本地 / 云盘 / 各类 NAS）"
+version = "0.3.0"
+description = "Media library naming scanner & organizer for local / cloud / any NAS — cn & plex (English) conventions, localized output"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"

@@ -239,8 +239,9 @@ LETTER_SUB = re.compile(
 
 # ── plex profile regexes (English / Plex conventions) ────
 
-# Movie folder: "Name (Year)" — year strongly expected
-PLEX_MOVIE_DIR_OK = re.compile(r"^.+ \([12]\d{3}\)$")
+# Movie folder: "Name (Year)" — year strongly expected; optional edition tag like
+# "Name (Year) [Director's Cut]" is allowed, but tags before the year are not.
+PLEX_MOVIE_DIR_OK = re.compile(r"^[^\[\]]+ \([12]\d{3}\)(\s*\[[^\]]+\])?$")
 
 
 def plex_movie_file_ok(filename, folder_name):
@@ -633,25 +634,32 @@ PROFILES: dict[str, Profile] = {
 
 def find_duplicates(repeat_source, root, profile_key: str = "cn"):
     """Detect likely duplicate title folders by base-name de-duplication."""
+    root = os.path.abspath(root)
+    zones = PROFILES[profile_key].zones
+    # 扫描点可以是父目录（电影/A）或 zone 目录本身（A）
+    # 前者层级 = root+2，后者 = root+1
+    root_is_zone = root.rstrip("/").rsplit("/", 1)[-1] in (zones.movie, zones.series)
+    target_level = root.count("/") + (1 if root_is_zone else 2)
     dir_names = {}
     for item in repeat_source():
-        if item["is_dir"] and item["path"].count("/") == root.count("/") + 2:
+        item_path = os.path.abspath(item["path"])
+        if item["is_dir"] and item_path.count("/") == target_level:
             name = item["name"]
             base = re.sub(r"\s*\[.*?\]", "", name)  # 去 [4K] [1080p] 等分辨率标签
             base = re.sub(r"\s*\(副本\d?\)", "", base)  # 去 (副本1) 后缀
-            dir_names.setdefault(base.strip(), []).append(name)
+            dir_names.setdefault(base.strip(), []).append((item_path, name))
 
     dups = []
-    for base, names in dir_names.items():
-        if len(names) > 1:
-            for n in names:
+    for base, entries in dir_names.items():
+        if len(entries) > 1:
+            for item_path, name in entries:
                 dups.append(
                     {
-                        "path": n,
-                        "name": n,
+                        "path": os.path.relpath(item_path, root),
+                        "name": name,
                         "is_dir": True,
                         "problems": ["DUPLICATE"],
-                        "dupe_count": len(names),
+                        "dupe_count": len(entries),
                     }
                 )
     return dups
@@ -714,13 +722,16 @@ def main():
     def validate_item(item, root):
         return profile.validate(item, root, zones)
 
+    def norm_root(r):
+        return os.path.normpath(r) if r else r
+
     if args.source == "zspace":
         try:
             from zspace_cli import ZSpaceClient
         except ImportError:
             print(tr("need_zspace", lang), file=sys.stderr)
             sys.exit(1)
-        root = args.root or DEFAULT_ROOT
+        root = norm_root(args.root or DEFAULT_ROOT)
         with ZSpaceClient() as c:
             _run(
                 walk_zspace(c, root),
@@ -733,7 +744,7 @@ def main():
                 lambda: walk_zspace(c, root),
             )
     else:
-        root = args.root or "."
+        root = norm_root(args.root or ".")
         if not os.path.isdir(root):
             print(tr("dir_not_found", lang, root=root), file=sys.stderr)
             sys.exit(1)
@@ -750,6 +761,7 @@ def main():
 
 
 def _run(scan_all, validate_item, root, output_json, preview, lang, profile_key, repeat_source):
+    root = os.path.normpath(root)
     print(tr("scanning", lang, root=root), file=sys.stderr)
 
     stats = {"dirs": 0, "files": 0}

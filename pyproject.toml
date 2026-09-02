@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "media-manager-skill"
-version = "0.1.0"
+version = "0.2.0"
 description = "影视库命名扫描与整理 Agent Skill — 深度扫描 + old→new 预览 + rename/move（本地 / 云盘 / 各类 NAS）"
 readme = "README.md"
 license = "MIT"
@@ -53,3 +53,4 @@ line-length = 100
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]

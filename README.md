@@ -44,13 +44,17 @@ mm-scan --source zspace /sata11/my/data/影视
 
 # JSON 输出（供后续处理）
 mm-scan --json /path/to/影视 > /tmp/issues.json
+
+# old→new 重命名建议（可机械修复项，确认后手动/批量执行）
+mm-scan --preview /path/to/影视
 ```
 
 ## 它能做什么
 
 - **深度扫描**影视目录（电影 / 剧集），按 [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide) 规范逐项验证
 - 识别：命名不规范、水印/站点标签、审查规避字符、占位符、文件/文件夹名不匹配、重复资源等问题
-- 输出 `old→new` **预览映射表**，确认后再批量 rename / move
+- 输出 `old→new` **预览映射表**（`--preview`），确认后再批量 rename / move
+- `--json` 输出的每条问题带 `new_name` 建议字段；重复资源检测对 JSON / 文本两种模式都生效
 - 数据源可插拔：本地文件系统（默认）或极空间 NAS（`--source zspace`）
 
 ## 搭配使用

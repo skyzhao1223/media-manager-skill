@@ -48,7 +48,12 @@ mm-scan --source zspace /sata11/my/data/影视
 
 # JSON 输出（供后续处理）
 mm-scan --json /path/to/影视 > /tmp/issues.json
+
+# old→new 重命名建议（可机械修复项）
+mm-scan --preview /path/to/影视
 ```
+
+> `--json` 输出的每条问题都带 `new_name` 建议字段；重复资源检测对 JSON / 文本两种模式都生效。
 
 ### Step 2: 修复
 

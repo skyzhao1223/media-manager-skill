@@ -11,10 +11,12 @@ Usage:
     python scan.py --json /path/to/影视 > issues.json
 """
 
-import re
-import sys
+from __future__ import annotations
+
 import json
 import os
+import re
+import sys
 
 DEFAULT_ROOT = "/sata11/my/data/影视"
 MAX_DEPTH = 8
@@ -55,10 +57,7 @@ def movie_file_ok(filename, folder_name):
     if re.search(r"\d+-\d+$", folder_name):
         return True
     # 字幕文件允许语言标签
-    if ext in SUB_EXTS:
-        if stem.startswith(folder_name):
-            return True
-    return False
+    return ext in SUB_EXTS and stem.startswith(folder_name)
 
 
 # 剧集文件夹名
@@ -88,7 +87,7 @@ SERIES_FILE_OK = re.compile(
     r"(\s*\[[\w.\s]+\])?"  # [4K] [国语] [粤语]
     r"\s*\."  # 允许扩展名前有空格
     r"(mp4|mkv|avi|ts|rmvb|flv|wmv|mov)$",
-    re.I,
+    re.IGNORECASE,
 )
 
 # 特殊内容：SP（彩蛋/花絮/MV等）、花絮/特辑/番外等
@@ -116,7 +115,7 @@ WATERMARK = re.compile(
     r"【|】|\[微信|\[公众号|￡|@圣城|Mp4Ba|XZYS|XunLeiJia|"
     r"kkkanba|字幕侠|霸王龙|压制组|微信|爱影哥|瞎看菌|雷锋菌|影喵儿|"
     r"情话菌|影视步行街|RARBG|STUTTERSHIT|SmY|CHAOSPACE",
-    re.I,
+    re.IGNORECASE,
 )
 
 PLACEHOLDER_ENGLISH = re.compile(
@@ -124,7 +123,7 @@ PLACEHOLDER_ENGLISH = re.compile(
     r"\s+TBD\s*$|"  # "TBD"
     r"\s+Unknown\s*$|"  # "Unknown"
     r"\s+XXX\s*$",  # "XXX"
-    re.I,
+    re.IGNORECASE,
 )
 
 
@@ -135,7 +134,7 @@ _WATERMARK_TOKENS = re.compile(
     r"Mp4Ba|XZYS|XunLeiJia|kkkanba|字幕侠|霸王龙|压制组|"
     r"微信|爱影哥|瞎看菌|雷锋菌|影喵儿|情话菌|影视步行街|"
     r"RARBG|STUTTERSHIT|SmY|CHAOSPACE|圣城",
-    re.I,
+    re.IGNORECASE,
 )
 
 
@@ -172,7 +171,7 @@ def suggest_new_name(name: str, is_dir: bool, folder_name: str | None = None) ->
 def _suggest_series_filename(name: str, folder_name: str) -> str | None:
     """剧集文件名重组为 `剧名 SXX EYY`，提取不出集号返回 None。"""
     ext = name.rsplit(".", 1)[-1].lower()
-    m = re.search(r"S(\d{2})\s*E(\d{2,3})|E(\d{2,3})", name, re.I)
+    m = re.search(r"S(\d{2})\s*E(\d{2,3})|E(\d{2,3})", name, re.IGNORECASE)
     if not m:
         return None
     if m.group(1):
@@ -205,18 +204,16 @@ def enrich_new_name(issue: dict, root: str) -> str | None:
     parts = path.split("/")
 
     # 2) 电影内部文件对齐文件夹名
-    if ext in VIDEO_EXTS and "电影视频文件名不匹配文件夹" in problems:
-        if len(parts) >= 3:
-            folder = parts[-2]
-            if name.rsplit(".", 1)[0] != folder:
-                return f"{folder}.{ext}"
+    if ext in VIDEO_EXTS and "电影视频文件名不匹配文件夹" in problems and len(parts) >= 3:
+        folder = parts[-2]
+        if name.rsplit(".", 1)[0] != folder:
+            return f"{folder}.{ext}"
 
     # 3) 剧集文件名重组为 剧名 SXX EYY
-    if ext in VIDEO_EXTS and "剧集视频文件名不合规" in problems:
-        if len(parts) >= 3:
-            cand = _suggest_series_filename(name, parts[-2])
-            if cand:
-                return cand
+    if ext in VIDEO_EXTS and "剧集视频文件名不合规" in problems and len(parts) >= 3:
+        cand = _suggest_series_filename(name, parts[-2])
+        if cand:
+            return cand
 
     return None
 
@@ -251,7 +248,7 @@ def walk_zspace(client, path, depth=0):
             resp = client._post(
                 "/v2/file/list", {"path": path, "start": start, "limit": 50, "show_hidden": 0}
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - 网络/API 异常一律视为分页结束
             break
         data = resp.get("data", resp) if isinstance(resp, dict) else {}
         items = data.get("list", []) if isinstance(data, dict) else []
@@ -282,6 +279,7 @@ def validate(item, root):
     rel = path.replace(root + "/", "") if path.startswith(root) else path
     ext = name.rsplit(".", 1)[-1].lower() if "." in name and not is_dir else ""
     stem = name.rsplit(".", 1)[0] if ext else name
+    parts = rel.split("/")
 
     # 确定所在区域
     in_movie = "/电影/" in path or path.endswith("/电影")
@@ -299,14 +297,13 @@ def validate(item, root):
 
     # 字母替代汉字检查 — 排除已知合规的模式
     clean_stem = re.sub(r"\[.*?\]|\(.*?\)", "", stem)  # 去掉方括号和圆括号内容
-    if LETTER_SUB.search(clean_stem):
-        # 排除：E01、S01E01 等集号格式
-        if not re.match(r"^[ES]\d", name):
-            # 排除：CD1、4K 等合规标签
-            if not re.match(r"^(CD|4K|3D|2D|TV|HD|MP|ID)\d*", clean_stem):
-                # 排除：已经是合规英文名中间的大写 (如 "The XX")
-                if not re.search(r"[a-z][A-Z]", clean_stem):
-                    problems.append("疑似字母替代汉字")
+    if (
+        LETTER_SUB.search(clean_stem)
+        and not re.match(r"^[ES]\d", name)  # 排除 E01、S01E01 等集号格式
+        and not re.match(r"^(CD|4K|3D|2D|TV|HD|MP|ID)\d*", clean_stem)  # 排除 CD1、4K 等合规标签
+        and not re.search(r"[a-z][A-Z]", clean_stem)  # 排除合规英文名中间的大写 (如 "The XX")
+    ):
+        problems.append("疑似字母替代汉字")
 
     # ── 占位符英文名 ──
     if is_dir and PLACEHOLDER_ENGLISH.search(name):
@@ -324,11 +321,10 @@ def validate(item, root):
     # ── 电影区域验证 ──
     if in_movie:
         # 一级子目录（电影文件夹）
-        if is_dir and path == f"{root}/电影/{name}":
-            if not MOVIE_DIR_OK.match(name):
-                problems.append("电影文件夹名不合规")
-            if re.search(r"\d+-\d+$", name):
-                problems.append("合集文件夹(应拆分为独立文件夹)")
+        if is_dir and path == f"{root}/电影/{name}" and not MOVIE_DIR_OK.match(name):
+            problems.append("电影文件夹名不合规")
+        if is_dir and path == f"{root}/电影/{name}" and re.search(r"\d+-\d+$", name):
+            problems.append("合集文件夹(应拆分为独立文件夹)")
 
         # 花絮子目录合规（花絮, 花絮 - XXX）
         if is_dir and re.match(r"^花絮(\s*-\s*.+)?$", name):
@@ -336,7 +332,6 @@ def validate(item, root):
 
         # 电影内部文件
         if not is_dir and ext in VIDEO_EXTS:
-            parts = rel.split("/")
             # 跳过花絮子目录内的文件（花絮内文件名自成体系）
             if any(re.match(r"^花絮", p) for p in parts[1:]):
                 return []
@@ -346,35 +341,37 @@ def validate(item, root):
                     problems.append("电影视频文件名不匹配文件夹")
 
         # 花絮子目录内的字幕文件也合规
-        if not is_dir and ext in SUB_EXTS:
-            parts = rel.split("/")
-            if any(re.match(r"^花絮", p) for p in parts[1:]):
-                return []
+        if not is_dir and ext in SUB_EXTS and any(re.match(r"^花絮", p) for p in parts[1:]):
+            return []
 
         # 散文件（直接在电影根目录）
-        if not is_dir and path == f"{root}/电影/{name}":
-            if ext in VIDEO_EXTS:
-                problems.append("电影散文件(应放入独立文件夹)")
+        if not is_dir and path == f"{root}/电影/{name}" and ext in VIDEO_EXTS:
+            problems.append("电影散文件(应放入独立文件夹)")
 
     # ── 剧集区域验证 ──
     if in_series:
         # 一级子目录（剧集文件夹）
-        if is_dir and path == f"{root}/剧集/{name}":
-            if not SERIES_DIR_OK.match(name):
-                problems.append("剧集文件夹名不合规")
+        if is_dir and path == f"{root}/剧集/{name}" and not SERIES_DIR_OK.match(name):
+            problems.append("剧集文件夹名不合规")
 
         # 剧集内部视频文件
-        if not is_dir and ext in VIDEO_EXTS:
-            parts = rel.split("/")
-            if len(parts) >= 3:
-                if not SERIES_FILE_OK.match(name) and not SERIES_SPECIAL_OK.match(name):
-                    # 纯数字也不行
-                    problems.append("剧集视频文件名不合规")
+        if (
+            not is_dir
+            and ext in VIDEO_EXTS
+            and len(parts) >= 3
+            and not SERIES_FILE_OK.match(name)
+            and not SERIES_SPECIAL_OK.match(name)
+        ):
+            # 纯数字也不行
+            problems.append("剧集视频文件名不合规")
 
     # ── PT/Scene 原始命名 ──
-    if not is_dir and ext in (VIDEO_EXTS | SUB_EXTS):
-        if re.match(r"^[A-Za-z][\w.]+\.\d{4}\.", name):
-            problems.append("PT/Scene原始命名")
+    if (
+        not is_dir
+        and ext in (VIDEO_EXTS | SUB_EXTS)
+        and re.match(r"^[A-Za-z][\w.]+\.\d{4}\.", name)
+    ):
+        problems.append("PT/Scene原始命名")
 
     # ── 格式转换残留 ──
     if re.search(r"\.qsv\.|\.flv\.mp4$", name):
@@ -461,11 +458,10 @@ def _run(scan_all, validate, root, output_json, preview, repeat_source):
                 }
             )
 
-    print(f'扫描完成: {stats["dirs"]} 目录, {stats["files"]} 文件\n', file=sys.stderr)
+    print(f"扫描完成: {stats['dirs']} 目录, {stats['files']} 文件\n", file=sys.stderr)
 
     # 重复资源检测（JSON / 文本两种输出都执行）
-    for dup in find_duplicates(repeat_source, root):
-        issues.append(dup)
+    issues.extend(find_duplicates(repeat_source, root))
 
     # 为每个问题项补充建议新名
     for issue in issues:
@@ -485,8 +481,8 @@ def _run(scan_all, validate, root, output_json, preview, repeat_source):
             print(f"── old → new 预览（{len(previewable)} 项） ──")
             for item in previewable:
                 tag = "📁" if item["is_dir"] else "  "
-                print(f'  {tag} {item["path"]}')
-                print(f'       → {item["new_name"]}')
+                print(f"  {tag} {item['path']}")
+                print(f"       → {item['new_name']}")
             print()
 
     # 按问题类型分组
@@ -501,7 +497,7 @@ def _run(scan_all, validate, root, output_json, preview, repeat_source):
         print(f"【{ptype}】{len(items)} 项")
         for item in items[:8]:
             tag = "📁" if item["is_dir"] else "  "
-            print(f'  {tag} {item["path"]}')
+            print(f"  {tag} {item['path']}")
         if len(items) > 8:
             print(f"  ... 还有 {len(items) - 8} 项")
         print()

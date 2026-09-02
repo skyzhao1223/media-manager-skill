@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""影视目录命名正向校验 —— 通用版（本地 / 极空间皆可）。
+"""Media library naming scanner — local / ZSpace / any mounted backend.
 
-核心思路：不是检测"脏模式"，而是验证每个文件/目录是否符合规范。
-任何不匹配规范格式的，全部输出。这样不会漏掉任何问题。
+核心思路 / Core idea: validate *against a compliant format* instead of
+blacklisting dirty patterns, so nothing is missed.
 
 Usage:
-    python scan.py [root_path]                  # 默认扫本地当前影视目录
-    python scan.py --source zspace /sata11/my/data/影视   # 扫极空间
-    python scan.py --source local /path/to/影视  # 扫本地目录
-    python scan.py --json /path/to/影视 > issues.json
+    python scan.py [root_path]                      # local
+    python scan.py --source zspace /sata11/my/data/影视
+    python scan.py --profile plex ~/Movies          # English/Plex conventions
+    python scan.py --json /path/to/media > issues.json
+    python scan.py --lang en /path/to/media         # English output
 """
 
 from __future__ import annotations
@@ -17,6 +18,8 @@ import json
 import os
 import re
 import sys
+from dataclasses import dataclass
+from typing import Callable
 
 DEFAULT_ROOT = "/sata11/my/data/影视"
 MAX_DEPTH = 8
@@ -25,10 +28,138 @@ VIDEO_EXTS = {"mp4", "mkv", "avi", "ts", "rmvb", "flv", "wmv", "mov", "iso", "m2
 SUB_EXTS = {"srt", "ass", "ssa", "sub", "idx"}
 JUNK_EXTS = {"torrent", "nfo", "td", "htm", "html", "url", "txt", "jpg", "png", "nzb"}
 
-# ── 合规格式定义 ──────────────────────────────────────────
+# ── Problem codes & localisation ─────────────────────────
+
+# Stable machine-readable issue codes. JSON output always uses these;
+# CLI/terminal output renders them via PROBLEM_MESSAGES[code][lang].
+#
+# cn-profile only:   BLACKLIST_CHAR, LETTER_SUB
+# plex-profile only: SERIES_SEASON_FOLDER
+
+PROBLEM_MESSAGES: dict[str, dict[str, str]] = {
+    "BLACKLIST_CHAR": {
+        "zh": "审查规避字符(丨｜)",
+        "en": "Censorship-evasion character (丨｜)",
+    },
+    "WATERMARK": {
+        "zh": "水印/站点标签",
+        "en": "Watermark / site tag",
+    },
+    "LETTER_SUB": {
+        "zh": "疑似字母替代汉字",
+        "en": "Possible letter-for-Chinese substitution",
+    },
+    "PLACEHOLDER": {
+        "zh": "占位符英文名(需查找正确英文名)",
+        "en": "Placeholder English name (look up the real one)",
+    },
+    "JUNK_FILE": {
+        "zh": "垃圾文件",
+        "en": "Junk file",
+    },
+    "DOWNLOAD_RESIDUE": {
+        "zh": "下载残留",
+        "en": "Download residue",
+    },
+    "MOVIE_FOLDER_NAME": {
+        "zh": "电影文件夹名不合规",
+        "en": "Movie folder name invalid",
+    },
+    "COLLECTION_FOLDER": {
+        "zh": "合集文件夹(应拆分为独立文件夹)",
+        "en": "Collection folder (split into individual movies)",
+    },
+    "MOVIE_VIDEO_MISMATCH": {
+        "zh": "电影视频文件名不匹配文件夹",
+        "en": "Movie video name does not match folder",
+    },
+    "MOVIE_LOOSE_FILE": {
+        "zh": "电影散文件(应放入独立文件夹)",
+        "en": "Loose movie file (belongs in its own folder)",
+    },
+    "SERIES_FOLDER_NAME": {
+        "zh": "剧集文件夹名不合规",
+        "en": "Series folder name invalid",
+    },
+    "SERIES_VIDEO_NAME": {
+        "zh": "剧集视频文件名不合规",
+        "en": "Series episode file name invalid",
+    },
+    "SERIES_SEASON_FOLDER": {
+        "zh": "季文件夹名不合规(应为 Season NN)",
+        "en": 'Season folder name invalid (expected "Season NN")',
+    },
+    "PT_SCENE_NAME": {
+        "zh": "PT/Scene原始命名",
+        "en": "PT/Scene raw naming",
+    },
+    "FORMAT_RESIDUE": {
+        "zh": "格式转换残留",
+        "en": "Format-conversion residue",
+    },
+    "DUPLICATE": {
+        "zh": "疑似重复资源({n}个)",
+        "en": "Possible duplicate ({n} copies)",
+    },
+}
+
+CLI_MESSAGES: dict[str, dict[str, str]] = {
+    "scanning": {"zh": "正在扫描 {root} ...\n", "en": "Scanning {root} ...\n"},
+    "done": {
+        "zh": "扫描完成: {dirs} 目录, {files} 文件\n",
+        "en": "Scan complete: {dirs} dirs, {files} files\n",
+    },
+    "all_ok": {"zh": "✅ 全部合规，零问题！", "en": "✅ All compliant, no issues!"},
+    "preview_title": {
+        "zh": "── old → new 预览（{n} 项） ──",
+        "en": "── old → new preview ({n} items) ──",
+    },
+    "issues_found": {"zh": "⚠  发现 {n} 个问题项:\n", "en": "⚠  {n} issue(s):\n"},
+    "group_title": {"zh": "【{label}】{n} 项", "en": "({label}) {n} item(s)"},
+    "more": {"zh": "  ... 还有 {n} 项", "en": "  ... and {n} more"},
+    "dir_not_found": {"zh": "✗ 目录不存在: {root}", "en": "✗ Directory not found: {root}"},
+    "need_zspace": {
+        "zh": "✗ --source zspace 需要先安装 zspace-cli: pip install zspace-cli",
+        "en": "✗ --source zspace requires zspace-cli: pip install zspace-cli",
+    },
+}
+
+
+def tr(code: str, lang: str, **kw) -> str:
+    """Localise a problem/CLI message for the given language."""
+    table = PROBLEM_MESSAGES.get(code) or CLI_MESSAGES.get(code) or {lang: code}
+    text = table.get(lang) or table.get("en") or code
+    return text.format(**kw) if kw else text
+
+
+def detect_lang(arg: str | None) -> str:
+    """Resolve --lang: explicit choice, or auto-detect from locale env."""
+    if arg in ("zh", "en"):
+        return arg
+    env = os.environ.get("LC_ALL", "") + " " + os.environ.get("LANG", "")
+    return "zh" if "zh" in env.lower() else "en"
+
+
+# ── Zones (configurable media directories) ───────────────
+
+
+@dataclass(frozen=True)
+class Zones:
+    movie: str
+    series: str
+
+
+CN_ZONES = Zones(movie="电影", series="剧集")
+PLEX_ZONES = Zones(movie="Movies", series="TV Shows")
+
+
+def _in_zone(path: str, zone: str) -> bool:
+    return f"/{zone}/" in path or path.endswith(f"/{zone}")
+
+
+# ── cn profile regexes (Chinese naming conventions) ──────
 
 # 电影文件夹名：中文名 English Name (年份) [分辨率 来源]
-# 允许：中文名中混数字（毒液2）、CJK标点（：·）、数字开头（2001太空漫游）
 MOVIE_DIR_OK = re.compile(
     r"^[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\d·A-Za-z]+"  # 中文名（含标点、数字、英文如 ID/007）
     r"\s+"
@@ -40,8 +171,8 @@ MOVIE_DIR_OK = re.compile(
 )
 
 
-# 电影内部视频文件名：应该与文件夹名一致（可以有 CD1/CD2/_2 后缀）
 def movie_file_ok(filename, folder_name):
+    """电影内部视频文件名：应与文件夹名一致（可有 CD1/CD2/_2 后缀）。"""
     stem = filename.rsplit(".", 1)[0]
     ext = filename.rsplit(".", 1)[-1].lower()
     if stem == folder_name:
@@ -60,7 +191,6 @@ def movie_file_ok(filename, folder_name):
     return ext in SUB_EXTS and stem.startswith(folder_name)
 
 
-# 剧集文件夹名
 SERIES_DIR_OK = re.compile(
     r"^[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\d·A-Za-z]+"
     r"\s+"
@@ -71,45 +201,73 @@ SERIES_DIR_OK = re.compile(
     r"$"
 )
 
-# 剧集内部文件名：
-# 1) 纯集号: E01, S01E01, E01-E02
-# 2) 带剧名前缀: 剧名 E01, 剧名 S01 E01
+# 剧集内部文件名：纯集号（E01/S01E01）或 剧名 S01 E01
 SERIES_FILE_OK = re.compile(
     r"^"
-    r"([\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\d·A-Za-z]+\s+[\w][\w\s\':,.\-&!()0-9]+\s+)?"  # 可选剧名前缀
+    r"([\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\d·A-Za-z]+\s+[\w][\w\s\':,.\-&!()0-9]+\s+)?"
     r"("
-    r"E\d{2,3}"  # E01, E02
-    r"|S\d{2}\s*E\d{2,3}"  # S01E01, S01 E01
-    r"|E\d{2,3}-E\d{2,3}"  # E01-E02
-    r"|S\d{2}\s*E\d{2,3}-E\d{2,3}"  # S01E01-E02
+    r"E\d{2,3}"
+    r"|S\d{2}\s*E\d{2,3}"
+    r"|E\d{2,3}-E\d{2,3}"
+    r"|S\d{2}\s*E\d{2,3}-E\d{2,3}"
     r")"
-    r"(\s*(END|V\d))?"  # END标记、V2等版本
-    r"(\s*\[[\w.\s]+\])?"  # [4K] [国语] [粤语]
-    r"\s*\."  # 允许扩展名前有空格
+    r"(\s*(END|V\d))?"
+    r"(\s*\[[\w.\s]+\])?"
+    r"\s*\."
     r"(mp4|mkv|avi|ts|rmvb|flv|wmv|mov)$",
     re.IGNORECASE,
 )
 
-# 特殊内容：SP（彩蛋/花絮/MV等）、花絮/特辑/番外等
-# 只认 SP{XX} 或明确的关键词；不带剧名的纯「第1集」「花絮1」会被判不合规
+# 特殊内容：SP（彩蛋/花絮/MV等）、花絮/特辑/番外等；纯「第1集」会被判不合规
 SERIES_SPECIAL_OK = re.compile(
     r"^"
-    r"([\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\d·A-Za-z]+\s+[\w][\w\s\':,.\-&!()0-9]+\s+)?"  # 可选剧名前缀
-    r"(SP\d{2}(\s+[\u4e00-\u9fffA-Za-z]+)?"  # SP01, SP01 彩蛋, SP01 MV
+    r"([\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\d·A-Za-z]+\s+[\w][\w\s\':,.\-&!()0-9]+\s+)?"
+    r"(SP\d{2}(\s+[\u4e00-\u9fffA-Za-z]+)?"
     r"|花絮|特辑|彩蛋|预告|番外|幕后|特别篇|精华版|前传)"
     r"\.(mp4|mkv|avi|ts)$"
 )
 
-# ── 通用黑名单（任何位置都不应出现） ──────────────────────
+# 审查规避断词符（中文资源特有）
+BLACKLIST_CHARS = re.compile(r"[丨｜]")
 
-BLACKLIST_CHARS = re.compile(r"[丨｜]")  # 审查规避用的特殊竖线
-
-# 单字母替代汉字的模式（如 S探、Z义联盟、Q余Y年）
+# 单字母替代汉字（中文资源特有，如 S探、Z义联盟）
 LETTER_SUB = re.compile(
-    r"(?:^[A-Z]{1,2}[\u4e00-\u9fff])"  # 开头1-2个大写字母+汉字
-    r"|(?:[\u4e00-\u9fff][A-Z]{1,3}[\u4e00-\u9fff])"  # 汉字+大写+汉字
-    r"|(?:[\u4e00-\u9fff][A-Z]{1,3}$)"  # 汉字+大写结尾
+    r"(?:^[A-Z]{1,2}[\u4e00-\u9fff])"
+    r"|(?:[\u4e00-\u9fff][A-Z]{1,3}[\u4e00-\u9fff])"
+    r"|(?:[\u4e00-\u9fff][A-Z]{1,3}$)"
 )
+
+# ── plex profile regexes (English / Plex conventions) ────
+
+# Movie folder: "Name (Year)" — year strongly expected
+PLEX_MOVIE_DIR_OK = re.compile(r"^.+ \([12]\d{3}\)$")
+
+
+def plex_movie_file_ok(filename, folder_name):
+    """Plex movie file: stem == folder name, allowing CD/part/_N suffixes."""
+    stem = filename.rsplit(".", 1)[0]
+    ext = filename.rsplit(".", 1)[-1].lower()
+    if stem == folder_name:
+        return True
+    if stem.startswith(folder_name):
+        suffix = stem[len(folder_name) :].strip()
+        if re.match(r"^(-?\s*(CD\d+|part\d+|disc\d+|_\d+|\[.*\]))*$", suffix, re.IGNORECASE):
+            return True
+    return ext in SUB_EXTS and stem.startswith(folder_name)
+
+
+# Episode file: must contain SxxEyy (or bare Eyy) and end with a video ext
+PLEX_EPISODE_OK = re.compile(
+    r"^(?=.*(?:\bS\d{1,2}E\d{2,3}\b|\bE\d{2,3}\b))"
+    r"[^\n]*\.(mp4|mkv|avi|ts|rmvb|flv|wmv|mov)$",
+    re.IGNORECASE,
+)
+
+# Season sub-folder (Plex: "Season 01" / "Season 1"; "Specials" allowed)
+SEASON_DIR_OK = re.compile(r"^Season\s*\d+$", re.IGNORECASE)
+
+
+# ── Generic blacklist (any profile) ──────────────────────
 
 WATERMARK = re.compile(
     r"【|】|\[微信|\[公众号|￡|@圣城|Mp4Ba|XZYS|XunLeiJia|"
@@ -119,17 +277,16 @@ WATERMARK = re.compile(
 )
 
 PLACEHOLDER_ENGLISH = re.compile(
-    r"\s+Erta\s*$|"  # "Erta" 占位符
-    r"\s+TBD\s*$|"  # "TBD"
-    r"\s+Unknown\s*$|"  # "Unknown"
-    r"\s+XXX\s*$",  # "XXX"
+    r"\s+Erta\s*$|"
+    r"\s+TBD\s*$|"
+    r"\s+Unknown\s*$|"
+    r"\s+XXX\s*$",
     re.IGNORECASE,
 )
 
 
-# ── old→new 建议（可机械修复的命名问题） ─────────────────
+# ── old→new suggestions ─────────────────────────────────
 
-# 可从文件名中安全移除的水印/站点标签 token（与 WATERMARK 对应）
 _WATERMARK_TOKENS = re.compile(
     r"Mp4Ba|XZYS|XunLeiJia|kkkanba|字幕侠|霸王龙|压制组|"
     r"微信|爱影哥|瞎看菌|雷锋菌|影喵儿|情话菌|影视步行街|"
@@ -139,39 +296,38 @@ _WATERMARK_TOKENS = re.compile(
 
 
 def _clean_name(name: str) -> str | None:
-    """清洗可机械修复的问题（水印/审查字符/多余空格）。无法安全处理的返回 None。"""
+    """Remove mechanically fixable issues (watermarks/censorship/spaces)."""
     if not name:
         return None
     cleaned = _WATERMARK_TOKENS.sub("", name)
-    cleaned = re.sub(r"【[^】]*】", "", cleaned)  # 【水印】整段
-    cleaned = re.sub(r"\[(微信|公众号)[^\]\[]*\]", "", cleaned)  # [微信xxx]
-    cleaned = re.sub(r"@圣城\S*", "", cleaned)  # @圣城xxx
-    cleaned = cleaned.replace("丨", "").replace("｜", "")  # 审查规避断词符
+    cleaned = re.sub(r"【[^】]*】", "", cleaned)
+    cleaned = re.sub(r"\[(微信|公众号)[^\]\[]*\]", "", cleaned)
+    cleaned = re.sub(r"@圣城\S*", "", cleaned)
+    cleaned = cleaned.replace("丨", "").replace("｜", "")
     cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
-    cleaned = re.sub(r"\s+\.", ".", cleaned)  # 删除扩展名前多余空格
+    cleaned = re.sub(r"\s+\.", ".", cleaned)
     if cleaned == name or not cleaned:
         return None
     return cleaned
 
 
 def suggest_new_name(name: str, is_dir: bool, folder_name: str | None = None) -> str | None:
-    """为单个名称生成建议新名；无法自动确定的返回 None。"""
+    """Suggest a new name for one item; None when it cannot be fixed safely."""
     if not name:
         return None
     if is_dir and PLACEHOLDER_ENGLISH.search(name):
-        return None  # 需查找正确英文名，不自动改
+        return None
     if not is_dir:
         ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
         if ext in JUNK_EXTS or name.endswith(".bt.td"):
-            return None  # 垃圾文件应删除而非改名
-    cleaned = _clean_name(name)
-    return cleaned
+            return None
+    return _clean_name(name)
 
 
 def _suggest_series_filename(name: str, folder_name: str) -> str | None:
-    """剧集文件名重组为 `剧名 SXX EYY`，提取不出集号返回 None。"""
+    """Rebuild an episode file name as `Show SXX EYY`; None if no episode id."""
     ext = name.rsplit(".", 1)[-1].lower()
-    m = re.search(r"S(\d{2})\s*E(\d{2,3})|E(\d{2,3})", name, re.IGNORECASE)
+    m = re.search(r"S(\d{1,2})\s*E(\d{2,3})|E(\d{2,3})", name, re.IGNORECASE)
     if not m:
         return None
     if m.group(1):
@@ -179,20 +335,19 @@ def _suggest_series_filename(name: str, folder_name: str) -> str | None:
         if "S" in folder_name.upper():
             base = f"{folder_name} E{ep}"
         else:
-            base = f"{folder_name} S{season} E{ep}"
+            base = f"{folder_name} S{season.zfill(2)} E{ep}"
     else:
         base = f"{folder_name} E{m.group(3)}"
     return f"{base}.{ext}"
 
 
 def enrich_new_name(issue: dict, root: str) -> str | None:
-    """为问题项补充建议新名 new_name；无法自动给出的返回 None。"""
+    """Attach a suggested new name for an issue; None if it can't be fixed."""
     path = issue["path"]
     name = issue["name"]
     is_dir = issue["is_dir"]
     problems = set(issue["problems"])
 
-    # 1) 通用清洗（水印/审查字符/空格）
     cleaned = _clean_name(name)
     if cleaned:
         return cleaned
@@ -203,14 +358,14 @@ def enrich_new_name(issue: dict, root: str) -> str | None:
     ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
     parts = path.split("/")
 
-    # 2) 电影内部文件对齐文件夹名
-    if ext in VIDEO_EXTS and "电影视频文件名不匹配文件夹" in problems and len(parts) >= 3:
+    # movie video file → align to folder name
+    if ext in VIDEO_EXTS and "MOVIE_VIDEO_MISMATCH" in problems and len(parts) >= 3:
         folder = parts[-2]
         if name.rsplit(".", 1)[0] != folder:
             return f"{folder}.{ext}"
 
-    # 3) 剧集文件名重组为 剧名 SXX EYY
-    if ext in VIDEO_EXTS and "剧集视频文件名不合规" in problems and len(parts) >= 3:
+    # series episode file → rebuild as  Show SXX EYY
+    if ext in VIDEO_EXTS and "SERIES_VIDEO_NAME" in problems and len(parts) >= 3:
         cand = _suggest_series_filename(name, parts[-2])
         if cand:
             return cand
@@ -218,11 +373,11 @@ def enrich_new_name(issue: dict, root: str) -> str | None:
     return None
 
 
-# ── 数据源遍历 ────────────────────────────────────────────
+# ── data source walkers ──────────────────────────────────
 
 
 def walk_local(root, depth=0):
-    """遍历本地文件系统目录。"""
+    """Walk a local filesystem directory tree."""
     if depth > MAX_DEPTH:
         return
     try:
@@ -239,7 +394,7 @@ def walk_local(root, depth=0):
 
 
 def walk_zspace(client, path, depth=0):
-    """遍历极空间 NAS 目录（zspace-cli 数据源，处理 50 条分页）。"""
+    """Walk a ZSpace NAS directory via zspace-cli (50-item pagination)."""
     if depth > MAX_DEPTH:
         return
     start = 0
@@ -248,7 +403,7 @@ def walk_zspace(client, path, depth=0):
             resp = client._post(
                 "/v2/file/list", {"path": path, "start": start, "limit": 50, "show_hidden": 0}
             )
-        except Exception:  # noqa: BLE001 - 网络/API 异常一律视为分页结束
+        except Exception:  # noqa: BLE001 - network/API error = end of listing
             break
         data = resp.get("data", resp) if isinstance(resp, dict) else {}
         items = data.get("list", []) if isinstance(data, dict) else []
@@ -266,95 +421,107 @@ def walk_zspace(client, path, depth=0):
         start += 50
 
 
-# ── 验证逻辑 ─────────────────────────────────────────────
+# ── profiles ─────────────────────────────────────────────
 
 
-def validate(item, root):
-    """返回问题列表。空列表=合规。"""
+@dataclass(frozen=True)
+class Profile:
+    key: str
+    zones: Zones
+    validate: Callable[[dict, str], list[str]]
+
+
+def _cn_checks(item, root, zones) -> list[str]:
+    """Profile-independent blacklist checks shared by all cn items."""
+    name = item["name"]
+    problems = []
+
+    if BLACKLIST_CHARS.search(name):
+        problems.append("BLACKLIST_CHAR")
+
+    if WATERMARK.search(name):
+        problems.append("WATERMARK")
+
+    return problems
+
+
+def validate(item, root, profile_key: str = "cn", zones: Zones | None = None) -> list[str]:
+    """Return a list of stable problem codes. Empty list = compliant."""
+    profile = PROFILES[profile_key]
+    zones = zones or profile.zones
+    return profile.validate(item, root, zones)
+
+
+def _validate_cn(item, root, zones: Zones) -> list[str]:
+    """Chinese naming conventions (cn profile)."""
     path = item["path"]
     name = item["name"]
     is_dir = item["is_dir"]
-    problems = []
+    problems = _cn_checks(item, root, zones)
 
     rel = path.replace(root + "/", "") if path.startswith(root) else path
     ext = name.rsplit(".", 1)[-1].lower() if "." in name and not is_dir else ""
     stem = name.rsplit(".", 1)[0] if ext else name
     parts = rel.split("/")
 
-    # 确定所在区域
-    in_movie = "/电影/" in path or path.endswith("/电影")
-    in_series = "/剧集/" in path or path.endswith("/剧集")
+    in_movie = _in_zone(path, zones.movie)
+    in_series = _in_zone(path, zones.series)
+    movie_dir = f"{root}/{zones.movie}/{name}"
+    series_dir = f"{root}/{zones.series}/{name}"
 
     if not in_movie and not in_series:
-        return []  # 非影视区域不检查
-
-    # ── 通用黑名单检查（对所有文件/目录都做） ──
-    if BLACKLIST_CHARS.search(name):
-        problems.append("审查规避字符(丨｜)")
-
-    if WATERMARK.search(name):
-        problems.append("水印/站点标签")
+        return []
 
     # 字母替代汉字检查 — 排除已知合规的模式
-    clean_stem = re.sub(r"\[.*?\]|\(.*?\)", "", stem)  # 去掉方括号和圆括号内容
+    clean_stem = re.sub(r"\[.*?\]|\(.*?\)", "", stem)
     if (
         LETTER_SUB.search(clean_stem)
-        and not re.match(r"^[ES]\d", name)  # 排除 E01、S01E01 等集号格式
-        and not re.match(r"^(CD|4K|3D|2D|TV|HD|MP|ID)\d*", clean_stem)  # 排除 CD1、4K 等合规标签
-        and not re.search(r"[a-z][A-Z]", clean_stem)  # 排除合规英文名中间的大写 (如 "The XX")
+        and not re.match(r"^[ES]\d", name)
+        and not re.match(r"^(CD|4K|3D|2D|TV|HD|MP|ID)\d*", clean_stem)
+        and not re.search(r"[a-z][A-Z]", clean_stem)
     ):
-        problems.append("疑似字母替代汉字")
+        problems.append("LETTER_SUB")
 
-    # ── 占位符英文名 ──
     if is_dir and PLACEHOLDER_ENGLISH.search(name):
-        problems.append("占位符英文名(需查找正确英文名)")
+        problems.append("PLACEHOLDER")
 
-    # ── 垃圾文件 ──
     if not is_dir and ext in JUNK_EXTS:
-        problems.append("垃圾文件")
+        problems.append("JUNK_FILE")
         return problems
 
     if not is_dir and name.endswith(".bt.td"):
-        problems.append("下载残留")
+        problems.append("DOWNLOAD_RESIDUE")
         return problems
 
-    # ── 电影区域验证 ──
     if in_movie:
-        # 一级子目录（电影文件夹）
-        if is_dir and path == f"{root}/电影/{name}" and not MOVIE_DIR_OK.match(name):
-            problems.append("电影文件夹名不合规")
-        if is_dir and path == f"{root}/电影/{name}" and re.search(r"\d+-\d+$", name):
-            problems.append("合集文件夹(应拆分为独立文件夹)")
+        if is_dir and path == movie_dir and not MOVIE_DIR_OK.match(name):
+            problems.append("MOVIE_FOLDER_NAME")
+        if is_dir and path == movie_dir and re.search(r"\d+-\d+$", name):
+            problems.append("COLLECTION_FOLDER")
 
         # 花絮子目录合规（花絮, 花絮 - XXX）
         if is_dir and re.match(r"^花絮(\s*-\s*.+)?$", name):
             return []
 
-        # 电影内部文件
         if not is_dir and ext in VIDEO_EXTS:
-            # 跳过花絮子目录内的文件（花絮内文件名自成体系）
             if any(re.match(r"^花絮", p) for p in parts[1:]):
                 return []
-            if len(parts) >= 3:  # 电影/文件夹/文件
+            if len(parts) >= 3:
                 folder = parts[1]
                 if not movie_file_ok(name, folder):
-                    problems.append("电影视频文件名不匹配文件夹")
+                    problems.append("MOVIE_VIDEO_MISMATCH")
 
-        # 花絮子目录内的字幕文件也合规
         if not is_dir and ext in SUB_EXTS and any(re.match(r"^花絮", p) for p in parts[1:]):
             return []
 
         # 散文件（直接在电影根目录）
-        if not is_dir and path == f"{root}/电影/{name}" and ext in VIDEO_EXTS:
-            problems.append("电影散文件(应放入独立文件夹)")
+        if not is_dir and path == movie_dir and ext in VIDEO_EXTS:
+            problems.append("MOVIE_LOOSE_FILE")
 
-    # ── 剧集区域验证 ──
     if in_series:
-        # 一级子目录（剧集文件夹）
-        if is_dir and path == f"{root}/剧集/{name}" and not SERIES_DIR_OK.match(name):
-            problems.append("剧集文件夹名不合规")
+        if is_dir and path == series_dir and not SERIES_DIR_OK.match(name):
+            problems.append("SERIES_FOLDER_NAME")
 
-        # 剧集内部视频文件
         if (
             not is_dir
             and ext in VIDEO_EXTS
@@ -362,155 +529,111 @@ def validate(item, root):
             and not SERIES_FILE_OK.match(name)
             and not SERIES_SPECIAL_OK.match(name)
         ):
-            # 纯数字也不行
-            problems.append("剧集视频文件名不合规")
+            problems.append("SERIES_VIDEO_NAME")
 
-    # ── PT/Scene 原始命名 ──
     if (
         not is_dir
         and ext in (VIDEO_EXTS | SUB_EXTS)
         and re.match(r"^[A-Za-z][\w.]+\.\d{4}\.", name)
     ):
-        problems.append("PT/Scene原始命名")
+        problems.append("PT_SCENE_NAME")
 
-    # ── 格式转换残留 ──
     if re.search(r"\.qsv\.|\.flv\.mp4$", name):
-        problems.append("格式转换残留")
+        problems.append("FORMAT_RESIDUE")
 
     return problems
 
 
-# ── 主程序 ────────────────────────────────────────────────
+def _validate_plex(item, root, zones: Zones) -> list[str]:
+    """English / Plex naming conventions (plex profile)."""
+    path = item["path"]
+    name = item["name"]
+    is_dir = item["is_dir"]
+    problems = []
+
+    if WATERMARK.search(name):
+        problems.append("WATERMARK")
+
+    rel = path.replace(root + "/", "") if path.startswith(root) else path
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name and not is_dir else ""
+    parts = rel.split("/")
+
+    in_movie = _in_zone(path, zones.movie)
+    in_series = _in_zone(path, zones.series)
+    movie_dir = f"{root}/{zones.movie}/{name}"
+
+    if not in_movie and not in_series:
+        return []
+
+    if is_dir and PLACEHOLDER_ENGLISH.search(name):
+        problems.append("PLACEHOLDER")
+
+    if not is_dir and ext in JUNK_EXTS:
+        problems.append("JUNK_FILE")
+        return problems
+
+    if not is_dir and name.endswith(".bt.td"):
+        problems.append("DOWNLOAD_RESIDUE")
+        return problems
+
+    if in_movie:
+        # movie folder: "Name (Year)"
+        if is_dir and path == movie_dir and not PLEX_MOVIE_DIR_OK.match(name):
+            problems.append("MOVIE_FOLDER_NAME")
+
+        # movie video file: stem must match its folder name
+        if not is_dir and ext in VIDEO_EXTS and len(parts) >= 3:
+            folder = parts[-2]
+            if not plex_movie_file_ok(name, folder):
+                problems.append("MOVIE_VIDEO_MISMATCH")
+
+        # loose movie file directly in the Movies root
+        if not is_dir and path == movie_dir and ext in VIDEO_EXTS:
+            problems.append("MOVIE_LOOSE_FILE")
+
+    if in_series:
+        # season sub-folder: "Season 01" (or "Specials")
+        if (
+            is_dir
+            and len(parts) == 3
+            and parts[0] == zones.series
+            and not SEASON_DIR_OK.match(name)
+            and name.lower() != "specials"
+        ):
+            problems.append("SERIES_SEASON_FOLDER")
+
+        # episode file: must contain SxxEyy / Eyy
+        if not is_dir and ext in VIDEO_EXTS and len(parts) >= 3 and not PLEX_EPISODE_OK.match(name):
+            problems.append("SERIES_VIDEO_NAME")
+
+    if (
+        not is_dir
+        and ext in (VIDEO_EXTS | SUB_EXTS)
+        and re.match(r"^[A-Za-z][\w.]+\.\d{4}\.", name)
+    ):
+        problems.append("PT_SCENE_NAME")
+
+    if re.search(r"\.qsv\.|\.flv\.mp4$", name):
+        problems.append("FORMAT_RESIDUE")
+
+    return problems
 
 
-def main():
-    import argparse
-
-    parser = argparse.ArgumentParser(description="影视目录命名正向校验（本地 / 极空间）")
-    parser.add_argument(
-        "root",
-        nargs="?",
-        default=None,
-        help="扫描根目录（--source local 时必填；--source zspace 默认 /sata11/my/data/影视）",
-    )
-    parser.add_argument(
-        "--source",
-        choices=("local", "zspace"),
-        default="local",
-        help="数据源：local=本地目录（默认），zspace=极空间 NAS（需 zspace-cli）",
-    )
-    parser.add_argument("--json", action="store_true", help="stdout 输出 JSON")
-    parser.add_argument("--preview", action="store_true", help="输出 old→new 重命名建议")
-    args = parser.parse_args()
-    output_json = args.json
-    preview = args.preview
-
-    if args.source == "zspace":
-        # 惰性导入，仅在需要极空间时才要求 zspace-cli
-        try:
-            from zspace_cli import ZSpaceClient
-        except ImportError:
-            print(
-                "✗ --source zspace 需要先安装 zspace-cli: pip install zspace-cli", file=sys.stderr
-            )
-            sys.exit(1)
-        root = args.root or DEFAULT_ROOT
-        with ZSpaceClient() as c:
-            scan_all = walk_zspace(c, root)
-            _run(
-                scan_all,
-                validate,
-                root,
-                output_json,
-                preview,
-                repeat_source=lambda: walk_zspace(c, root),
-            )
-    else:
-        root = args.root or "."
-        if not os.path.isdir(root):
-            print(f"✗ 目录不存在: {root}", file=sys.stderr)
-            sys.exit(1)
-        scan_all = walk_local(root)
-        _run(scan_all, validate, root, output_json, preview, repeat_source=lambda: walk_local(root))
+PROFILES: dict[str, Profile] = {
+    "cn": Profile(key="cn", zones=CN_ZONES, validate=_validate_cn),
+    "plex": Profile(key="plex", zones=PLEX_ZONES, validate=_validate_plex),
+}
 
 
-def _run(scan_all, validate, root, output_json, preview, repeat_source):
-    print(f"正在扫描 {root} ...\n", file=sys.stderr)
-
-    stats = {"dirs": 0, "files": 0}
-    issues = []
-
-    for item in scan_all:
-        if item["is_dir"]:
-            stats["dirs"] += 1
-        else:
-            stats["files"] += 1
-
-        problems = validate(item, root)
-        if problems:
-            rel = item["path"].replace(root + "/", "")
-            issues.append(
-                {
-                    "path": rel,
-                    "name": item["name"],
-                    "is_dir": item["is_dir"],
-                    "problems": problems,
-                }
-            )
-
-    print(f"扫描完成: {stats['dirs']} 目录, {stats['files']} 文件\n", file=sys.stderr)
-
-    # 重复资源检测（JSON / 文本两种输出都执行）
-    issues.extend(find_duplicates(repeat_source, root))
-
-    # 为每个问题项补充建议新名
-    for issue in issues:
-        issue["new_name"] = enrich_new_name(issue, root)
-
-    if output_json:
-        json.dump(issues, sys.stdout, ensure_ascii=False, indent=2)
-        return
-
-    if not issues:
-        print("✅ 全部合规，零问题！")
-        return
-
-    if preview:
-        previewable = [i for i in issues if i.get("new_name")]
-        if previewable:
-            print(f"── old → new 预览（{len(previewable)} 项） ──")
-            for item in previewable:
-                tag = "📁" if item["is_dir"] else "  "
-                print(f"  {tag} {item['path']}")
-                print(f"       → {item['new_name']}")
-            print()
-
-    # 按问题类型分组
-    by_type = {}
-    for issue in issues:
-        for p in issue["problems"]:
-            by_type.setdefault(p, []).append(issue)
-
-    print(f"⚠  发现 {len(issues)} 个问题项:\n")
-
-    for ptype, items in sorted(by_type.items(), key=lambda x: -len(x[1])):
-        print(f"【{ptype}】{len(items)} 项")
-        for item in items[:8]:
-            tag = "📁" if item["is_dir"] else "  "
-            print(f"  {tag} {item['path']}")
-        if len(items) > 8:
-            print(f"  ... 还有 {len(items) - 8} 项")
-        print()
-
-
-def find_duplicates(repeat_source, root):
-    """基于中文名去重，检测疑似重复资源目录。"""
+def find_duplicates(repeat_source, root, profile_key: str = "cn"):
+    """Detect likely duplicate title folders by base-name de-duplication."""
     dir_names = {}
     for item in repeat_source():
         if item["is_dir"] and item["path"].count("/") == root.count("/") + 2:
             name = item["name"]
             base = re.sub(r"\s*\[.*?\]", "", name)
             base = re.sub(r"\s*\(副本\d?\)", "", base)
+            base = re.sub(r"\s*\(\d{4}\)", "", base)
             dir_names.setdefault(base, []).append(name)
 
     dups = []
@@ -522,10 +645,170 @@ def find_duplicates(repeat_source, root):
                         "path": n,
                         "name": n,
                         "is_dir": True,
-                        "problems": [f"疑似重复资源({len(names)}个)"],
+                        "problems": ["DUPLICATE"],
+                        "dupe_count": len(names),
                     }
                 )
     return dups
+
+
+# ── CLI ──────────────────────────────────────────────────
+
+
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Media library naming scanner (local / ZSpace / mounted backends)"
+    )
+    parser.add_argument(
+        "root",
+        nargs="?",
+        default=None,
+        help="Scan root (required for --source local; default for zspace is /sata11/my/data/影视)",
+    )
+    parser.add_argument(
+        "--source",
+        choices=("local", "zspace"),
+        default="local",
+        help="Data source: local directory (default) or zspace NAS (needs zspace-cli)",
+    )
+    parser.add_argument(
+        "--profile",
+        choices=("cn", "plex"),
+        default="cn",
+        help="Naming conventions: cn=Chinese (default), plex=English/Plex",
+    )
+    parser.add_argument(
+        "--movie-zone",
+        default=None,
+        help="Movie root folder name (default depends on profile: 电影 / Movies)",
+    )
+    parser.add_argument(
+        "--series-zone",
+        default=None,
+        help="Series root folder name (default depends on profile: 剧集 / TV Shows)",
+    )
+    parser.add_argument(
+        "--lang",
+        choices=("auto", "zh", "en"),
+        default="auto",
+        help="Output language: auto (from locale), zh, or en",
+    )
+    parser.add_argument("--json", action="store_true", help="Emit JSON to stdout")
+    parser.add_argument("--preview", action="store_true", help="Show old→new rename suggestions")
+    args = parser.parse_args()
+
+    lang = detect_lang(args.lang if args.lang != "auto" else None)
+    profile = PROFILES[args.profile]
+    zones = Zones(
+        movie=args.movie_zone or profile.zones.movie,
+        series=args.series_zone or profile.zones.series,
+    )
+
+    def validate_item(item, root):
+        return profile.validate(item, root, zones)
+
+    if args.source == "zspace":
+        try:
+            from zspace_cli import ZSpaceClient
+        except ImportError:
+            print(tr("need_zspace", lang), file=sys.stderr)
+            sys.exit(1)
+        root = args.root or DEFAULT_ROOT
+        with ZSpaceClient() as c:
+            _run(
+                walk_zspace(c, root),
+                validate_item,
+                root,
+                args.json,
+                args.preview,
+                lang,
+                args.profile,
+                lambda: walk_zspace(c, root),
+            )
+    else:
+        root = args.root or "."
+        if not os.path.isdir(root):
+            print(tr("dir_not_found", lang, root=root), file=sys.stderr)
+            sys.exit(1)
+        _run(
+            walk_local(root),
+            validate_item,
+            root,
+            args.json,
+            args.preview,
+            lang,
+            args.profile,
+            lambda: walk_local(root),
+        )
+
+
+def _run(scan_all, validate_item, root, output_json, preview, lang, profile_key, repeat_source):
+    print(tr("scanning", lang, root=root), file=sys.stderr)
+
+    stats = {"dirs": 0, "files": 0}
+    issues = []
+
+    for item in scan_all:
+        if item["is_dir"]:
+            stats["dirs"] += 1
+        else:
+            stats["files"] += 1
+
+        problems = validate_item(item, root)
+        if problems:
+            rel = item["path"].replace(root + "/", "")
+            issues.append(
+                {
+                    "path": rel,
+                    "name": item["name"],
+                    "is_dir": item["is_dir"],
+                    "problems": problems,
+                }
+            )
+
+    print(tr("done", lang, dirs=stats["dirs"], files=stats["files"]), file=sys.stderr)
+
+    issues.extend(find_duplicates(repeat_source, root, profile_key))
+
+    for issue in issues:
+        issue["new_name"] = enrich_new_name(issue, root)
+
+    if output_json:
+        json.dump(issues, sys.stdout, ensure_ascii=False, indent=2)
+        return
+
+    if not issues:
+        print(tr("all_ok", lang))
+        return
+
+    if preview:
+        previewable = [i for i in issues if i.get("new_name")]
+        if previewable:
+            print(tr("preview_title", lang, n=len(previewable)))
+            for item in previewable:
+                tag = "📁" if item["is_dir"] else "  "
+                print(f"  {tag} {item['path']}")
+                print(f"       → {item['new_name']}")
+            print()
+
+    by_type = {}
+    for issue in issues:
+        for p in issue["problems"]:
+            by_type.setdefault(p, []).append(issue)
+
+    print(tr("issues_found", lang, n=len(issues)))
+
+    for ptype, items in sorted(by_type.items(), key=lambda x: -len(x[1])):
+        label = tr(ptype, lang, n=len(items)) if "DUPLICATE" in ptype else tr(ptype, lang)
+        print(tr("group_title", lang, label=label, n=len(items)))
+        for item in items[:8]:
+            tag = "📁" if item["is_dir"] else "  "
+            print(f"  {tag} {item['path']}")
+        if len(items) > 8:
+            print(tr("more", lang, n=len(items) - 8))
+        print()
 
 
 if __name__ == "__main__":

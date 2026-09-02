@@ -1,95 +1,165 @@
 # media-manager-skill
 
-**影视库命名扫描与整理 Agent Skill** — 深度扫描 + `old→new` 预览 + rename/move。**本地影音库、云盘（网盘）、各类 NAS（极空间 / 群晖 / 威联通 …）都支持**。
+**Media library naming scanner & organizer** — deep scan + `old→new` preview + rename/move.
+Works on **local disks, cloud drives (网盘), and any NAS** (ZSpace/极空间, Synology, QNAP …).
+Built for a **global audience**: Chinese (`cn`) and English/Plex (`plex`) naming conventions,
+localized output, and configurable library folders.
 
-> 命名规范来自 [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide)。  
-> 核心校验逻辑是纯 Python，与存储后端无关；NAS 通过适配器接入（如极空间走 [zspace-cli](https://github.com/skyzhao1223/zspace-cli)）。
-
----
-
-## 支持的场景
-
-| 场景 | 数据源 | 说明 |
-|------|--------|------|
-| 本地影音库 | `--source local`（默认） | 纯 Python，扫本地目录，零依赖 |
-| 极空间 NAS | `--source zspace` | 走 [zspace-cli](https://github.com/skyzhao1223/zspace-cli) 读桌面客户端登录态 |
-| 其他 NAS（群晖/威联通等） | 挂载 + 本地模式 | 挂载成本地盘符/目录，直接用 `--source local` |
-| 云盘 / 网盘 | 挂载 + 本地模式 | rclone / WebDAV 等挂载为本地目录后用 `--source local` |
-
-> 只要能把目录列成 `{path, name, is_dir}` 就能用本扫描器。挂载成本地目录是最简单的接入方式。
+> Naming conventions live in [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide).
+> The core is pure Python and backend-agnostic; NAS access goes through adapters
+> (e.g. ZSpace via [zspace-cli](https://github.com/skyzhao1223/zspace-cli)).
+> 中文版文档见 [README.zh-CN.md](README.zh-CN.md).
 
 ---
 
-## 安装
+## Supported scenarios
+
+| Scenario | Source | Notes |
+|----------|--------|-------|
+| Local media library | `--source local` (default) | Pure Python, zero deps |
+| ZSpace NAS | `--source zspace` | Reuses the desktop client login via [zspace-cli](https://github.com/skyzhao1223/zspace-cli) |
+| Other NAS (Synology/QNAP…) | mount + local | Mount as a local folder, then use `--source local` |
+| Cloud drives | mount + local | rclone / WebDAV mounts work with `--source local` |
+
+> Anything that can be listed as `{path, name, is_dir}` works with the scanner.
+> Mounting as a local folder is the simplest integration.
+
+## Naming convention profiles
+
+Pick the ruleset that matches your library:
+
+| Profile | Description | Default folders |
+|---------|-------------|-----------------|
+| `cn` (default) | Chinese conventions: `中文名 English Name (年份) [分辨率]`, censorship-evasion & site-watermark checks | `电影` / `剧集` |
+| `plex` | English/Plex conventions: `Name (Year)`, `Season 01/`, `S01E01` | `Movies` / `TV Shows` |
+
+Folders are configurable — use `--movie-zone` / `--series-zone` to match your own layout.
+
+## Install
 
 ```bash
-pip install media-manager-skill          # 本地模式，零依赖
-pip install "media-manager-skill[zspace]"  # 极空间模式（带上 zspace-cli）
+pip install media-manager-skill            # local mode, zero deps
+pip install "media-manager-skill[zspace]"  # ZSpace mode (bundles zspace-cli)
 
-# 命令行入口
-mm-scan --source local /path/to/影视
+# CLI entry point
+mm-scan --source local /path/to/library
 ```
 
-> 不安装直接跑脚本也行：`python scripts/scan.py --source local /path/to/影视`（本仓库即含完整实现）。
+> No install needed to try it: `python scripts/scan.py --source local /path/to/library`
+> (this repo ships the full implementation).
 
-## 快速开始
+## Quick start
 
 ```bash
-# 本地目录（默认）
-mm-scan --source local /path/to/影视
+# Chinese library (default)
+mm-scan /path/to/影视
 
-# 极空间 NAS
+# English / Plex library
+mm-scan --profile plex ~/Movies
+
+# ZSpace NAS
 zs check
 mm-scan --source zspace /sata11/my/data/影视
 
-# JSON 输出（供后续处理）
-mm-scan --json /path/to/影视 > /tmp/issues.json
+# English output (auto-detected from locale if not set)
+mm-scan --lang en /path/to/library
 
-# old→new 重命名建议（可机械修复项，确认后手动/批量执行）
-mm-scan --preview /path/to/影视
+# JSON output (machine-readable problem codes)
+mm-scan --json /path/to/library > /tmp/issues.json
+
+# old→new rename suggestions
+mm-scan --preview /path/to/library
+
+# Custom folder names
+mm-scan --profile plex --movie-zone Films --series-zone Shows ~/Videos
 ```
 
-## 它能做什么
+## CLI options
 
-- **深度扫描**影视目录（电影 / 剧集），按 [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide) 规范逐项验证
-- 识别：命名不规范、水印/站点标签、审查规避字符、占位符、文件/文件夹名不匹配、重复资源等问题
-- 输出 `old→new` **预览映射表**（`--preview`），确认后再批量 rename / move
-- `--json` 输出的每条问题带 `new_name` 建议字段；重复资源检测对 JSON / 文本两种模式都生效
-- 数据源可插拔：本地文件系统（默认）或极空间 NAS（`--source zspace`）
+| Option | Meaning |
+|--------|---------|
+| `root` | Scan root (required for `--source local`) |
+| `--source {local,zspace}` | Data source; default `local` |
+| `--profile {cn,plex}` | Naming conventions; default `cn` |
+| `--movie-zone NAME` | Movie root folder name (default from profile) |
+| `--series-zone NAME` | Series root folder name (default from profile) |
+| `--lang {auto,zh,en}` | Output language; `auto` reads `LC_ALL`/`LANG` |
+| `--json` | Emit JSON to stdout |
+| `--preview` | Show `old→new` rename suggestions |
 
-## 搭配使用
+## What it does
 
-与 **Jellyfin / Emby / MoviePilot / nas-tools / 极影视** 搭配：入库或刮削前先扫描一遍，把命名问题一次暴露，避免刮削失败。见 [docs/integrations.md](docs/integrations.md)。
+- Deep-scans a media library (movies / series) against the selected naming convention
+- Detects: invalid folder/file names, watermarks/site tags, censorship-evasion characters
+  (cn), placeholders, folder/file name mismatches, PT/Scene raw names, duplicates
+- Outputs an `old→new` **preview** (`--preview`) before you rename/move in bulk
+- JSON output uses **stable problem codes** (see below); CLI/terminal output is localized
+- Pluggable sources: local filesystem (default) or ZSpace NAS (`--source zspace`)
 
-## 作为 Agent Skill
+## Problem codes (JSON contract)
+
+`--json` emits a list of issues. Each item: `{path, name, is_dir, problems, new_name}` where
+`problems` is a list of stable machine-readable codes (they never change across locales):
+
+| Code | Meaning | cn | plex |
+|------|---------|:--:|:----:|
+| `MOVIE_FOLDER_NAME` | Movie folder name invalid | ✓ | ✓ |
+| `COLLECTION_FOLDER` | Collection folder; split into single movies | ✓ | — |
+| `MOVIE_VIDEO_MISMATCH` | Movie video name ≠ folder name | ✓ | ✓ |
+| `MOVIE_LOOSE_FILE` | Loose movie file in the movie root | ✓ | ✓ |
+| `SERIES_FOLDER_NAME` | Series folder name invalid | ✓ | — |
+| `SERIES_VIDEO_NAME` | Series episode file name invalid | ✓ | ✓ |
+| `SERIES_SEASON_FOLDER` | Season folder not `Season NN` | — | ✓ |
+| `BLACKLIST_CHAR` | Censorship-evasion character (`丨｜`) | ✓ | — |
+| `LETTER_SUB` | Letter-for-Chinese substitution | ✓ | — |
+| `WATERMARK` | Watermark / site tag | ✓ | ✓ |
+| `PLACEHOLDER` | Placeholder English name | ✓ | ✓ |
+| `JUNK_FILE` | Junk file (delete it) | ✓ | ✓ |
+| `DOWNLOAD_RESIDUE` | Download residue (`.bt.td`) | ✓ | ✓ |
+| `PT_SCENE_NAME` | PT/Scene raw naming | ✓ | ✓ |
+| `FORMAT_RESIDUE` | Format-conversion residue | ✓ | ✓ |
+| `DUPLICATE` | Possible duplicate title (see `dupe_count`) | ✓ | ✓ |
+
+For human-readable text, map codes through `PROBLEM_MESSAGES[code][lang]` (exported by the
+package) or just run the CLI without `--json`.
+
+## Pairing with other tools
+
+Use before Jellyfin / Emby / MoviePilot / nas-tools / 极影视 ingesting or scraping to surface
+naming problems in one pass. See [docs/integrations.md](docs/integrations.md).
+
+## As an Agent Skill
 
 ```bash
 cp -r SKILL.md scripts ~/your-project/skills/media-manager/
 ```
 
-然后对你的 Agent 说：「扫一下 `/sata11/my/data/影视` 的命名问题」（极空间）或「扫一下 `~/Movies` 的命名问题」（本地）。
+Then ask your agent: "扫一下 `/sata11/my/data/影视` 的命名问题" (ZSpace) or
+"scan naming issues in `~/Movies`" (local/plex).
 
-## 目录结构
+## Repository layout
 
 ```
 media-manager-skill/
-├── SKILL.md          # Agent skill 主文件（工作流 + 踩坑）
+├── SKILL.md          # Agent skill entry (workflow + gotchas)
 ├── scripts/
-│   └── scan.py       # 薄封装（同一份核心代码，不装包也能跑）
+│   └── scan.py       # Thin wrapper (same core, runnable without install)
 ├── src/
 │   └── media_manager_skill/
-│       └── scan.py   # 核心实现（pip 安装后由 mm-scan 调用）
+│       ├── scan.py   # Core implementation (profiles, i18n, CLI)
+│       └── __init__.py
+├── tests/            # pytest suite (cn + plex + i18n)
 └── docs/
-    └── integrations.md  # 与 Jellyfin / MoviePilot / 极影视等搭配使用
+    └── integrations.md
 ```
 
-## 原理与限制
+## How it works & limitations
 
-- 核心校验逻辑是纯 Python（正则 + 规则），**与存储后端无关**——本地、云盘、各类 NAS 都可用
-- 极空间模式通过 zspace-cli 读桌面客户端登录态访问文件 API，需 macOS 桌面客户端在线
-- 其他 NAS / 云盘：挂载为本地目录即可用 `--source local`，或写一个十几行的遍历适配器接入
-- 命名规范来自 [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide)
-- 非官方项目，仅面向**本人账号、个人影视库**
+- Core validation is pure Python (regex + rules), backend-agnostic — local, cloud, any NAS
+- ZSpace mode reads the desktop client login via zspace-cli; the macOS client must be online
+- Other NAS / cloud: mount as a local folder, or write a small walker adapter
+- Naming conventions come from [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide)
+- Unofficial project, intended for personal libraries
 
 ## License
 

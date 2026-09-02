@@ -354,6 +354,49 @@ def test_find_duplicates(tmp_path: Path):
     assert dup_paths == {"A (2024) [4K]", "A (2024) [1080p]"}
     assert all(d["problems"] == ["DUPLICATE"] for d in dups)
     assert all(d["dupe_count"] == 2 for d in dups)
+    assert {d["path"] for d in dups} == {"电影/A (2024) [4K]", "电影/A (2024) [1080p]"}
+
+
+def test_find_duplicates_trailing_slash_root(tmp_path: Path):
+    # root 带尾斜杠时深度判断不应失效
+    root = f"{tmp_path}/"
+    dirs = [
+        {
+            "path": f"{tmp_path}/电影/A (2024) [4K]",
+            "name": "A (2024) [4K]",
+            "is_dir": True,
+            "depth": 2,
+        },
+        {
+            "path": f"{tmp_path}/电影/A (2024) [1080p]",
+            "name": "A (2024) [1080p]",
+            "is_dir": True,
+            "depth": 2,
+        },
+    ]
+    dups = find_duplicates(lambda: iter(dirs), root)
+    assert {d["name"] for d in dups} == {"A (2024) [4K]", "A (2024) [1080p]"}
+
+
+def test_find_duplicates_when_root_is_zone(tmp_path: Path):
+    # 直接扫描 zone 目录本身（root=/data/电影 或 /data/Movies）时也要能检出重复
+    root = f"{tmp_path}/Movies"
+    dirs = [
+        {
+            "path": f"{tmp_path}/Movies/A (2024) [4K]",
+            "name": "A (2024) [4K]",
+            "is_dir": True,
+            "depth": 1,
+        },
+        {
+            "path": f"{tmp_path}/Movies/A (2024) [1080p]",
+            "name": "A (2024) [1080p]",
+            "is_dir": True,
+            "depth": 1,
+        },
+    ]
+    dups = find_duplicates(lambda: iter(dirs), root, profile_key="plex")
+    assert {d["name"] for d in dups} == {"A (2024) [4K]", "A (2024) [1080p]"}
 
 
 def test_find_duplicates_keeps_year_distinct(tmp_path: Path):

@@ -8,5 +8,5 @@ from media_manager_skill.scan import (
     walk_zspace,
 )
 
-__all__ = ["validate", "walk_local", "walk_zspace", "find_duplicates", "suggest_new_name"]
+__all__ = ["find_duplicates", "suggest_new_name", "validate", "walk_local", "walk_zspace"]
 __version__ = "0.2.0"

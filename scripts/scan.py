@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from media_manager_skill.scan import main  # noqa: E402
+from media_manager_skill.scan import main
 
 if __name__ == "__main__":
     main()

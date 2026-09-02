@@ -48,7 +48,12 @@ mm-scan --source zspace /sata11/my/data/影视
 
 # JSON 输出（供后续处理）
 mm-scan --json /path/to/影视 > /tmp/issues.json
+
+# old→new 重命名建议（可机械修复项）
+mm-scan --preview /path/to/影视
 ```
+
+> `--json` 输出的每条问题都带 `new_name` 建议字段；重复资源检测对 JSON / 文本两种模式都生效。
 
 ### Step 2: 修复
 
@@ -76,7 +81,7 @@ def walk_local(root, depth=0):
         name = entry.name
         item_path = os.path.join(root, name)
         is_dir = entry.is_dir()
-        yield {'path': item_path, 'name': name, 'is_dir': is_dir, 'depth': depth}
+        yield {"path": item_path, "name": name, "is_dir": is_dir, "depth": depth}
         if is_dir:
             yield from walk_local(item_path, depth + 1)
 ```
@@ -90,20 +95,20 @@ def walk_zspace(client, path, depth=0):
     start = 0
     while True:
         try:
-            resp = client._post('/v2/file/list', {
-                'path': path, 'start': start, 'limit': 50, 'show_hidden': 0
-            })
+            resp = client._post(
+                "/v2/file/list", {"path": path, "start": start, "limit": 50, "show_hidden": 0}
+            )
         except Exception:
             break
-        data = resp.get('data', resp) if isinstance(resp, dict) else {}
-        items = data.get('list', []) if isinstance(data, dict) else []
+        data = resp.get("data", resp) if isinstance(resp, dict) else {}
+        items = data.get("list", []) if isinstance(data, dict) else []
         if not items:
             break
         for item in items:
-            name = item.get('name', '')
-            item_path = item.get('path', f'{path}/{name}')
-            is_dir = str(item.get('is_dir', '0')) == '1'
-            yield {'path': item_path, 'name': name, 'is_dir': is_dir, 'depth': depth}
+            name = item.get("name", "")
+            item_path = item.get("path", f"{path}/{name}")
+            is_dir = str(item.get("is_dir", "0")) == "1"
+            yield {"path": item_path, "name": name, "is_dir": is_dir, "depth": depth}
             if is_dir:
                 yield from walk_zspace(client, item_path, depth + 1)
         if len(items) < 50:
@@ -120,11 +125,11 @@ def walk_zspace(client, path, depth=0):
 文件名不可信时，可获取视频元数据辅助判断。**极空间模式**通过 API 获取：
 
 ```python
-info = c._post('/v2/file/info', {'path': video_path})
-data = info.get('data', info)
-duration_min = int(data.get('duration', 0)) // 60
+info = c._post("/v2/file/info", {"path": video_path})
+data = info.get("data", info)
+duration_min = int(data.get("duration", 0)) // 60
 resolution = f"{data.get('width')}x{data.get('height')}"
-size_mb = int(data.get('size', 0)) // (1024 * 1024)
+size_mb = int(data.get("size", 0)) // (1024 * 1024)
 ```
 
 **用途**：排除明显不匹配的情况（如 22 分钟的文件不可能是 131 分钟的电影）。

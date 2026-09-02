@@ -11,9 +11,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from media_manager_skill.scan import (  # noqa: E402
-    find_duplicates,
+from media_manager_skill.scan import (
     enrich_new_name,
+    find_duplicates,
     suggest_new_name,
     validate,
     walk_local,

@@ -98,8 +98,8 @@ PROBLEM_MESSAGES: dict[str, dict[str, str]] = {
         "en": "Format-conversion residue",
     },
     "DUPLICATE": {
-        "zh": "疑似重复资源({n}个)",
-        "en": "Possible duplicate ({n} copies)",
+        "zh": "疑似重复资源",
+        "en": "Possible duplicate",
     },
 }
 
@@ -324,8 +324,8 @@ def suggest_new_name(name: str, is_dir: bool, folder_name: str | None = None) ->
     return _clean_name(name)
 
 
-def _suggest_series_filename(name: str, folder_name: str) -> str | None:
-    """Rebuild an episode file name as `Show SXX EYY`; None if no episode id."""
+def _suggest_series_filename(name: str, folder_name: str, plex: bool = False) -> str | None:
+    """Rebuild an episode file name as `Show SXX EYY` (plex: `Show SXXEYY`)."""
     ext = name.rsplit(".", 1)[-1].lower()
     m = re.search(r"S(\d{1,2})\s*E(\d{2,3})|E(\d{2,3})", name, re.IGNORECASE)
     if not m:
@@ -334,6 +334,8 @@ def _suggest_series_filename(name: str, folder_name: str) -> str | None:
         season, ep = m.group(1), m.group(2)
         if "S" in folder_name.upper():
             base = f"{folder_name} E{ep}"
+        elif plex:
+            base = f"{folder_name} S{season.zfill(2)}E{ep}"
         else:
             base = f"{folder_name} S{season.zfill(2)} E{ep}"
     else:
@@ -341,12 +343,13 @@ def _suggest_series_filename(name: str, folder_name: str) -> str | None:
     return f"{base}.{ext}"
 
 
-def enrich_new_name(issue: dict, root: str) -> str | None:
+def enrich_new_name(issue: dict, root: str, profile_key: str = "cn") -> str | None:
     """Attach a suggested new name for an issue; None if it can't be fixed."""
     path = issue["path"]
     name = issue["name"]
     is_dir = issue["is_dir"]
     problems = set(issue["problems"])
+    plex = profile_key == "plex"
 
     cleaned = _clean_name(name)
     if cleaned:
@@ -364,9 +367,12 @@ def enrich_new_name(issue: dict, root: str) -> str | None:
         if name.rsplit(".", 1)[0] != folder:
             return f"{folder}.{ext}"
 
-    # series episode file → rebuild as  Show SXX EYY
+    # series episode file → rebuild as  Show SXX EYY (plex: skip the "Season NN" level)
     if ext in VIDEO_EXTS and "SERIES_VIDEO_NAME" in problems and len(parts) >= 3:
-        cand = _suggest_series_filename(name, parts[-2])
+        folder = parts[-2]
+        if plex and len(parts) >= 4 and SEASON_DIR_OK.match(folder):
+            folder = parts[-3]
+        cand = _suggest_series_filename(name, folder, plex=plex)
         if cand:
             return cand
 
@@ -428,7 +434,7 @@ def walk_zspace(client, path, depth=0):
 class Profile:
     key: str
     zones: Zones
-    validate: Callable[[dict, str], list[str]]
+    validate: Callable[[dict, str, Zones], list[str]]
 
 
 def _cn_checks(item, root, zones) -> list[str]:
@@ -631,10 +637,9 @@ def find_duplicates(repeat_source, root, profile_key: str = "cn"):
     for item in repeat_source():
         if item["is_dir"] and item["path"].count("/") == root.count("/") + 2:
             name = item["name"]
-            base = re.sub(r"\s*\[.*?\]", "", name)
-            base = re.sub(r"\s*\(副本\d?\)", "", base)
-            base = re.sub(r"\s*\(\d{4}\)", "", base)
-            dir_names.setdefault(base, []).append(name)
+            base = re.sub(r"\s*\[.*?\]", "", name)  # 去 [4K] [1080p] 等分辨率标签
+            base = re.sub(r"\s*\(副本\d?\)", "", base)  # 去 (副本1) 后缀
+            dir_names.setdefault(base.strip(), []).append(name)
 
     dups = []
     for base, names in dir_names.items():
@@ -773,7 +778,7 @@ def _run(scan_all, validate_item, root, output_json, preview, lang, profile_key,
     issues.extend(find_duplicates(repeat_source, root, profile_key))
 
     for issue in issues:
-        issue["new_name"] = enrich_new_name(issue, root)
+        issue["new_name"] = enrich_new_name(issue, root, profile_key)
 
     if output_json:
         json.dump(issues, sys.stdout, ensure_ascii=False, indent=2)
@@ -801,7 +806,7 @@ def _run(scan_all, validate_item, root, output_json, preview, lang, profile_key,
     print(tr("issues_found", lang, n=len(issues)))
 
     for ptype, items in sorted(by_type.items(), key=lambda x: -len(x[1])):
-        label = tr(ptype, lang, n=len(items)) if "DUPLICATE" in ptype else tr(ptype, lang)
+        label = tr(ptype, lang)
         print(tr("group_title", lang, label=label, n=len(items)))
         for item in items[:8]:
             tag = "📁" if item["is_dir"] else "  "

@@ -2,7 +2,8 @@
 name: media-manager
 description: >-
   Organize movies and TV series across many storage backends: local disk,
-  cloud drives, or NAS (ZSpace, Synology, QNAP, etc.). Deep-scan a
+  cloud drives, or NAS (ZSpace, Synology, QNAP, UGREEN, TerraMaster, ASUSTOR,
+  WD My Cloud, Lenovo, Hikvision, TrueNAS, Unraid, OpenMediaVault, etc.). Deep-scan a
   media library against naming conventions, preview old→new changes, then
   rename/move. Naming conventions live in media-naming-guide; a generic
   scanner walks local folders, and NAS sources plug in via adapters (e.g.
@@ -14,7 +15,8 @@ description: >-
 # Media library organization
 
 Organize a media library across storage backends — **local disk, cloud drives, and any NAS**
-(ZSpace, Synology, QNAP …). Validate names against a chosen naming convention, preview
+(ZSpace, Synology, QNAP, UGREEN, TerraMaster, ASUSTOR, WD My Cloud, Lenovo, Hikvision,
+TrueNAS, Unraid, OpenMediaVault …). Validate names against a chosen naming convention, preview
 `old→new` changes, then rename/move. The skill also understands Chinese trigger phrases
 (e.g. 影视整理, 影视命名扫描).
 

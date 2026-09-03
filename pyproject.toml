@@ -12,7 +12,7 @@ requires-python = ">=3.9"
 authors = [
     { name = "skyzhao1223" },
 ]
-keywords = ["media", "movie", "tv", "nas", "jellyfin", "moviepilot", "plex", "rename", "scanner", "影视", "整理", "命名", "skill"]
+keywords = ["media", "movie", "tv", "nas", "jellyfin", "moviepilot", "plex", "rename", "scanner", "synology", "qnap", "ugreen", "terramaster", "asustor", "truenas", "unraid", "openmediavault", "影视", "整理", "命名", "skill"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",

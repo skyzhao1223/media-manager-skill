@@ -2,7 +2,7 @@
 name: media-manager
 description: >-
   Organize movies and TV series across many storage backends: local disk,
-  cloud drives (网盘), or NAS (极空间/ZSpace, 群晖, 威联通, etc.). Deep-scan a
+  cloud drives, or NAS (ZSpace, Synology, QNAP, etc.). Deep-scan a
   media library against naming conventions, preview old→new changes, then
   rename/move. Naming conventions live in media-naming-guide; a generic
   scanner walks local folders, and NAS sources plug in via adapters (e.g.
@@ -13,9 +13,10 @@ description: >-
 
 # Media library organization
 
-Organize a media library across storage backends — **local disk, cloud drives (网盘), and any NAS
-(极空间/ZSpace, 群晖, 威联通 …)**. Validate names against a chosen naming convention, preview
-`old→new` changes, then rename/move. 中文用户可直接说中文触发词，本 skill 会自动处理。
+Organize a media library across storage backends — **local disk, cloud drives, and any NAS**
+(ZSpace, Synology, QNAP …). Validate names against a chosen naming convention, preview
+`old→new` changes, then rename/move. The skill also understands Chinese trigger phrases
+(e.g. 影视整理, 影视命名扫描).
 
 > **Conventions**: [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide)  
 > **Sources**: local directory (default, universal); NAS via adapters (e.g. `--source zspace` uses
@@ -47,14 +48,14 @@ Zone folder names are configurable (`--movie-zone` / `--series-zone`) to match y
 mm-scan --source local /path/to/library
 python scripts/scan.py --source local /path/to/library
 
-# Chinese library (default profile cn)
-mm-scan /path/to/影视
+# Chinese library (default profile cn, folders 电影/剧集)
+mm-scan /path/to/library
 
 # English / Plex library
 mm-scan --profile plex ~/Movies
 
 # ZSpace NAS (needs zspace-cli)
-mm-scan --source zspace /sata11/my/data/影视
+mm-scan --source zspace /path/to/library
 
 # Custom zone folder names
 mm-scan --profile plex --movie-zone Films --series-zone Shows ~/Videos
@@ -169,7 +170,7 @@ ffprobe -v error -show_entries format=duration -show_entries stream=width,height
 | Gotcha | Symptom | Fix |
 |--------|---------|-----|
 | Only scans one level | Season/4K subfolders missed | recursive walk `max_depth=8` |
-| Mixed zh/en folders | movie/series misdetected | keep `电影/`+`剧集/` or `Movies/`+`TV Shows/` zones, or pass `--movie-zone`/`--series-zone` |
+| Mixed zh/en folders | movie/series misdetected | keep `电影`/`剧集` or `Movies`/`TV Shows` zones, or pass `--movie-zone`/`--series-zone` |
 | rename arg (ZSpace) | path in 2nd arg breaks | 2nd arg is a **bare filename**, no path |
 | API pagination (ZSpace) | `c.ls()` caps at 50 | `_post` + `start`/`limit` loop |
 | token expiry (ZSpace) | scan fails mid-way | re-init `ZSpaceClient` |

@@ -6,7 +6,7 @@
 
 </div>
 
-**影视库命名扫描与整理 Agent Skill** — 深度扫描 + `old→new` 预览 + rename/move。**本地影音库、云盘（网盘）、各类 NAS（极空间 / 群晖 / 威联通 …）都支持**，并且面向全球用户：内置中文（`cn`）与英文/Plex（`plex`）两套命名规范、多语言输出、库目录可配置。
+**影视库命名扫描与整理 Agent Skill** — 深度扫描 + `old→new` 预览 + rename/move。**本地影音库、云盘（网盘）、各类 NAS（极空间 / 群晖 / 威联通 / 绿联 / 铁威马 / 华芸 / 西部数据 / 联想 / 海康威视 / TrueNAS / Unraid / OpenMediaVault …）都支持**，并且面向全球用户：内置中文（`cn`）与英文/Plex（`plex`）两套命名规范、多语言输出、库目录可配置。
 
 > 命名规范来自 [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide)。  
 > 核心校验逻辑是纯 Python，与存储后端无关；NAS 通过适配器接入（如极空间走 [zspace-cli](https://github.com/skyzhao1223/zspace-cli)）。
@@ -19,7 +19,7 @@
 |------|--------|------|
 | 本地影音库 | `--source local`（默认） | 纯 Python，扫本地目录，零依赖 |
 | 极空间 NAS | `--source zspace` | 走 [zspace-cli](https://github.com/skyzhao1223/zspace-cli) 读桌面客户端登录态 |
-| 其他 NAS（群晖/威联通等） | 挂载 + 本地模式 | 挂载成本地盘符/目录，直接用 `--source local` |
+| 其他 NAS | 挂载 + 本地模式 | 群晖 Synology、威联通 QNAP、绿联 UGREEN、铁威马 TerraMaster、华芸 ASUSTOR、西部数据 WD My Cloud、联想 Lenovo、海康威视 Hikvision、TrueNAS、Unraid、OpenMediaVault 等——挂载成本地盘符/目录，直接用 `--source local` |
 | 云盘 / 网盘 | 挂载 + 本地模式 | rclone / WebDAV 等挂载为本地目录后用 `--source local` |
 
 > 只要能把目录列成 `{path, name, is_dir}` 就能用本扫描器。挂载成本地目录是最简单的接入方式。

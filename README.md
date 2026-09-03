@@ -11,7 +11,9 @@
 </div>
 
 **Media library naming scanner & organizer** — deep scan + `old→new` preview + rename/move.
-Works on **local disks, cloud drives, and any NAS** (ZSpace, Synology, QNAP …).
+Works on **local disks, cloud drives, and any NAS** — ZSpace, Synology, QNAP, UGREEN,
+TerraMaster, ASUSTOR, WD My Cloud, Lenovo, Hikvision, TrueNAS, Unraid, OpenMediaVault,
+and more.
 Built for a **global audience**: Chinese (`cn`) and English/Plex (`plex`) naming conventions,
 localized output, and configurable library folders.
 
@@ -27,7 +29,7 @@ localized output, and configurable library folders.
 |----------|--------|-------|
 | Local media library | `--source local` (default) | Pure Python, zero deps |
 | ZSpace NAS | `--source zspace` | Reuses the desktop client login via [zspace-cli](https://github.com/skyzhao1223/zspace-cli) |
-| Other NAS (Synology/QNAP…) | mount + local | Mount as a local folder, then use `--source local` |
+| Other NAS | mount + local | Synology, QNAP, UGREEN, TerraMaster, ASUSTOR, WD My Cloud, Lenovo, Hikvision, TrueNAS, Unraid, OMV… — mount as a local folder, then use `--source local` |
 | Cloud drives | mount + local | rclone / WebDAV mounts work with `--source local` |
 
 > Anything that can be listed as `{path, name, is_dir}` works with the scanner.

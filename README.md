@@ -1,14 +1,23 @@
+<div align="center">
+
 # media-manager-skill
 
+**English** · [简体中文](README.zh-CN.md)
+
+[![PyPI - Version](https://img.shields.io/pypi/v/media-manager-skill)](https://pypi.org/project/media-manager-skill/)
+[![PyPI - Python](https://img.shields.io/pypi/pyversions/media-manager-skill)](https://pypi.org/project/media-manager-skill/)
+[![CI](https://github.com/skyzhao1223/media-manager-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/skyzhao1223/media-manager-skill/actions/workflows/ci.yml)
+
+</div>
+
 **Media library naming scanner & organizer** — deep scan + `old→new` preview + rename/move.
-Works on **local disks, cloud drives (网盘), and any NAS** (ZSpace/极空间, Synology, QNAP …).
+Works on **local disks, cloud drives, and any NAS** (ZSpace, Synology, QNAP …).
 Built for a **global audience**: Chinese (`cn`) and English/Plex (`plex`) naming conventions,
 localized output, and configurable library folders.
 
 > Naming conventions live in [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide).
 > The core is pure Python and backend-agnostic; NAS access goes through adapters
 > (e.g. ZSpace via [zspace-cli](https://github.com/skyzhao1223/zspace-cli)).
-> 中文版文档见 [README.zh-CN.md](README.zh-CN.md).
 
 ---
 
@@ -30,10 +39,12 @@ Pick the ruleset that matches your library:
 
 | Profile | Description | Default folders |
 |---------|-------------|-----------------|
-| `cn` (default) | Chinese conventions: `中文名 English Name (年份) [分辨率]`, censorship-evasion & site-watermark checks | `电影` / `剧集` |
+| `cn` (default) | Chinese conventions: `Chinese Title English Name (Year) [Quality]`, censorship-evasion & site-watermark checks | `电影` / `剧集` |
 | `plex` | English/Plex conventions: `Name (Year)`, `Season 01/`, `S01E01` | `Movies` / `TV Shows` |
 
 Folders are configurable — use `--movie-zone` / `--series-zone` to match your own layout.
+The `cn` profile's default folder names are Chinese (`电影` movies / `剧集` series); the `plex`
+profile defaults are English (`Movies` / `TV Shows`).
 
 ## Install
 
@@ -51,15 +62,15 @@ mm-scan --source local /path/to/library
 ## Quick start
 
 ```bash
-# Chinese library (default)
-mm-scan /path/to/影视
+# Chinese library (default profile cn, folders 电影/剧集)
+mm-scan /path/to/library
 
 # English / Plex library
 mm-scan --profile plex ~/Movies
 
 # ZSpace NAS
 zs check
-mm-scan --source zspace /sata11/my/data/影视
+mm-scan --source zspace /path/to/library
 
 # English output (auto-detected from locale if not set)
 mm-scan --lang en /path/to/library
@@ -110,7 +121,7 @@ mm-scan --profile plex --movie-zone Films --series-zone Shows ~/Videos
 | `SERIES_FOLDER_NAME` | Series folder name invalid | ✓ | — |
 | `SERIES_VIDEO_NAME` | Series episode file name invalid | ✓ | ✓ |
 | `SERIES_SEASON_FOLDER` | Season folder not `Season NN` | — | ✓ |
-| `BLACKLIST_CHAR` | Censorship-evasion character (`丨｜`) | ✓ | — |
+| `BLACKLIST_CHAR` | Censorship-evasion character (full-width bars `丨｜`) | ✓ | — |
 | `LETTER_SUB` | Letter-for-Chinese substitution | ✓ | — |
 | `WATERMARK` | Watermark / site tag | ✓ | ✓ |
 | `PLACEHOLDER` | Placeholder English name | ✓ | ✓ |
@@ -125,8 +136,8 @@ package) or just run the CLI without `--json`.
 
 ## Pairing with other tools
 
-Use before Jellyfin / Emby / MoviePilot / nas-tools / 极影视 ingesting or scraping to surface
-naming problems in one pass. See [docs/integrations.md](docs/integrations.md).
+Use before Jellyfin / Emby / MoviePilot / nas-tools / ZSpace media ingesting or scraping to
+surface naming problems in one pass. See [docs/integrations.md](docs/integrations.md).
 
 ## As an Agent Skill
 
@@ -134,8 +145,8 @@ naming problems in one pass. See [docs/integrations.md](docs/integrations.md).
 cp -r SKILL.md scripts ~/your-project/skills/media-manager/
 ```
 
-Then ask your agent: "扫一下 `/sata11/my/data/影视` 的命名问题" (ZSpace) or
-"scan naming issues in `~/Movies`" (local/plex).
+Then ask your agent: "scan naming issues in `~/Movies`" (local/plex) or
+"scan naming issues in `/path/to/library`" (ZSpace).
 
 ## Repository layout
 

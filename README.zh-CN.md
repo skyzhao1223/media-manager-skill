@@ -1,10 +1,15 @@
+<div align="center">
+
 # media-manager-skill
+
+[English](README.md) · **简体中文**
+
+</div>
 
 **影视库命名扫描与整理 Agent Skill** — 深度扫描 + `old→new` 预览 + rename/move。**本地影音库、云盘（网盘）、各类 NAS（极空间 / 群晖 / 威联通 …）都支持**，并且面向全球用户：内置中文（`cn`）与英文/Plex（`plex`）两套命名规范、多语言输出、库目录可配置。
 
 > 命名规范来自 [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide)。  
-> 核心校验逻辑是纯 Python，与存储后端无关；NAS 通过适配器接入（如极空间走 [zspace-cli](https://github.com/skyzhao1223/zspace-cli)）。  
-> English docs: [README.md](README.md)。
+> 核心校验逻辑是纯 Python，与存储后端无关；NAS 通过适配器接入（如极空间走 [zspace-cli](https://github.com/skyzhao1223/zspace-cli)）。
 
 ---
 

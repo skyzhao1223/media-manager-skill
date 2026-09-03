@@ -12,7 +12,7 @@ requires-python = ">=3.9"
 authors = [
     { name = "skyzhao1223" },
 ]
-keywords = ["media", "movie", "tv", "nas", "jellyfin", "moviepilot", "影视", "整理", "命名", "skill"]
+keywords = ["media", "movie", "tv", "nas", "jellyfin", "moviepilot", "plex", "rename", "scanner", "影视", "整理", "命名", "skill"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -28,7 +28,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 
-# 极空间数据源是可选依赖；本地模式零依赖
+# ZSpace source is an optional extra; local mode has zero deps
 [project.optional-dependencies]
 zspace = ["zspace-cli>=0.1.0"]
 dev = [

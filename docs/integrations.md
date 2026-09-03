@@ -2,7 +2,6 @@
 
 media-manager-skill is a **pre-ingest check**: run a naming scan before import/scraping so all
 problems surface in one pass. It does not replace any player/scraper — it complements them.
-（中文说明见各小节末尾的「推荐流程」。）
 
 ## Jellyfin / Emby
 
@@ -11,7 +10,7 @@ Jellyfin and Emby have strict structural requirements (one folder per movie; epi
 
 **Recommended flow**:
 1. Scan first: `mm-scan --profile plex /path/to/library` (English library) or
-   `mm-scan /path/to/影视` (Chinese library)
+   `mm-scan /path/to/library` (Chinese library, default `cn` profile)
 2. Fix per the [media-naming-guide](https://github.com/skyzhao1223/media-naming-guide) checklist
 3. Then add to Jellyfin/Emby so the scraper gets it right the first time
 
@@ -28,15 +27,15 @@ recognizable input — a messy library causes misjudgments.
 2. Hand off to MoviePilot / nas-tools for automatic organization
 3. Run `mm-scan` periodically as an incremental check for newly added content
 
-## 极影视 (ZSpace / 极空间)
+## ZSpace (极影视)
 
-ZSpace's own media player also needs proper names to scrape. ZSpace files are reached via the
+ZSpace's own media player (极影视) also needs proper names to scrape. ZSpace files are reached via the
 desktop client, so scan the NAS directly with `--source zspace`:
 
 ```bash
 pip install media-manager-skill zspace-cli
 zs check
-mm-scan --source zspace /sata11/my/data/影视
+mm-scan --source zspace /path/to/library
 ```
 
 ## Local library / cloud drives
@@ -47,7 +46,7 @@ mounted locally via rclone/WebDAV and scanned the same way:
 ```bash
 # rclone mount example
 rclone mount mydrive:media ~/mnt/mydrive --vfs-cache-mode writes &
-mm-scan --source local ~/mnt/mydrive/影视
+mm-scan --source local ~/mnt/mydrive/library
 ```
 
 ## Why scan first?

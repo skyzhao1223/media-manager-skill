@@ -43,8 +43,8 @@ Pick the ruleset that matches your library:
 | `plex` | English/Plex conventions: `Name (Year)`, `Season 01/`, `S01E01` | `Movies` / `TV Shows` |
 
 Folders are configurable — use `--movie-zone` / `--series-zone` to match your own layout.
-The `cn` profile's default folder names are Chinese (`电影` movies / `剧集` series); the `plex`
-profile defaults are English (`Movies` / `TV Shows`).
+The `cn` profile defaults to `电影` and `剧集`; the `plex` profile defaults to `Movies` and
+`TV Shows`.
 
 ## Install
 

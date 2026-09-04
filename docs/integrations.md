@@ -33,7 +33,8 @@ ZSpace's own media player (极影视) also needs proper names to scrape. ZSpace 
 desktop client, so scan the NAS directly with `--source zspace`:
 
 ```bash
-pip install media-manager-skill zspace-cli
+pip install zspace-cli
+pip install "media-manager-skill @ git+https://github.com/skyzhao1223/media-manager-skill.git"
 zs check
 mm-scan --source zspace /path/to/library
 ```

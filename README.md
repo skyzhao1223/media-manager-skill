@@ -4,8 +4,6 @@
 
 **English** · [简体中文](README.zh-CN.md)
 
-[![PyPI - Version](https://img.shields.io/pypi/v/media-manager-skill)](https://pypi.org/project/media-manager-skill/)
-[![PyPI - Python](https://img.shields.io/pypi/pyversions/media-manager-skill)](https://pypi.org/project/media-manager-skill/)
 [![CI](https://github.com/skyzhao1223/media-manager-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/skyzhao1223/media-manager-skill/actions/workflows/ci.yml)
 
 </div>
@@ -50,9 +48,11 @@ The `cn` profile defaults to `电影` and `剧集`; the `plex` profile defaults 
 
 ## Install
 
+> **Note**: not yet on PyPI. Install directly from GitHub (or just run the in-repo script).
+
 ```bash
-pip install media-manager-skill            # local mode, zero deps
-pip install "media-manager-skill[zspace]"  # ZSpace mode (bundles zspace-cli)
+pip install "media-manager-skill[zspace] @ git+https://github.com/skyzhao1223/media-manager-skill.git"  # with ZSpace support
+pip install "media-manager-skill @ git+https://github.com/skyzhao1223/media-manager-skill.git"          # local mode, zero deps
 
 # CLI entry point
 mm-scan --source local /path/to/library

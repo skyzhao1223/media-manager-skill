@@ -438,7 +438,7 @@ class Profile:
     validate: Callable[[dict, str, Zones], list[str]]
 
 
-def _cn_checks(item, root, zones) -> list[str]:
+def _cn_checks(item) -> list[str]:
     """Profile-independent blacklist checks shared by all cn items."""
     name = item["name"]
     problems = []
@@ -464,7 +464,7 @@ def _validate_cn(item, root, zones: Zones) -> list[str]:
     path = item["path"]
     name = item["name"]
     is_dir = item["is_dir"]
-    problems = _cn_checks(item, root, zones)
+    problems = _cn_checks(item)
 
     rel = path.replace(root + "/", "") if path.startswith(root) else path
     ext = name.rsplit(".", 1)[-1].lower() if "." in name and not is_dir else ""
@@ -492,12 +492,12 @@ def _validate_cn(item, root, zones: Zones) -> list[str]:
     if is_dir and PLACEHOLDER_ENGLISH.search(name):
         problems.append("PLACEHOLDER")
 
-    if not is_dir and ext in JUNK_EXTS:
-        problems.append("JUNK_FILE")
-        return problems
-
     if not is_dir and name.endswith(".bt.td"):
         problems.append("DOWNLOAD_RESIDUE")
+        return problems
+
+    if not is_dir and ext in JUNK_EXTS:
+        problems.append("JUNK_FILE")
         return problems
 
     if in_movie:
@@ -575,12 +575,12 @@ def _validate_plex(item, root, zones: Zones) -> list[str]:
     if is_dir and PLACEHOLDER_ENGLISH.search(name):
         problems.append("PLACEHOLDER")
 
-    if not is_dir and ext in JUNK_EXTS:
-        problems.append("JUNK_FILE")
-        return problems
-
     if not is_dir and name.endswith(".bt.td"):
         problems.append("DOWNLOAD_RESIDUE")
+        return problems
+
+    if not is_dir and ext in JUNK_EXTS:
+        problems.append("JUNK_FILE")
         return problems
 
     if in_movie:

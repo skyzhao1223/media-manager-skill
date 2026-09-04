@@ -188,6 +188,25 @@ def test_junk_file(tmp_path: Path):
     assert "JUNK_FILE" in problems
 
 
+def test_download_residue_cn(tmp_path: Path):
+    # .bt.td 应报 DOWNLOAD_RESIDUE，而不是被 JUNK_EXTS 短路成 JUNK_FILE
+    problems = validate(
+        _item(str(tmp_path), "电影/好东西 Her Story (2024)/partial.mkv.bt.td", False), str(tmp_path)
+    )
+    assert "DOWNLOAD_RESIDUE" in problems
+    assert "JUNK_FILE" not in problems
+
+
+def test_download_residue_plex(tmp_path: Path):
+    problems = validate(
+        _item(str(tmp_path), "Movies/Inception (2010)/Inception.bt.td", False),
+        str(tmp_path),
+        profile_key="plex",
+    )
+    assert "DOWNLOAD_RESIDUE" in problems
+    assert "JUNK_FILE" not in problems
+
+
 def test_pt_scene_name(tmp_path: Path):
     problems = validate(
         _item(

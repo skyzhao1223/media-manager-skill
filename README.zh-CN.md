@@ -35,9 +35,11 @@
 
 ## 安装
 
+> **注意**：尚未发布到 PyPI。请直接从 GitHub 安装（或直接跑仓库内脚本）。
+
 ```bash
-pip install media-manager-skill          # 本地模式，零依赖
-pip install "media-manager-skill[zspace]"  # 极空间模式（带上 zspace-cli）
+pip install "media-manager-skill[zspace] @ git+https://github.com/skyzhao1223/media-manager-skill.git"  # 极空间模式（带上 zspace-cli）
+pip install "media-manager-skill @ git+https://github.com/skyzhao1223/media-manager-skill.git"          # 本地模式，零依赖
 
 # 命令行入口
 mm-scan --source local /path/to/影视

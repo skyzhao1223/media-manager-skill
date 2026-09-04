@@ -38,7 +38,7 @@ Zone folder names are configurable (`--movie-zone` / `--series-zone`) to match y
 ## Prerequisites
 
 - Local mode: Python 3.9+
-- ZSpace mode: `pip install zspace-cli`, `zs check` passes, ZSpace macOS client logged in
+- ZSpace mode: `pip install zspace-cli` (published on PyPI), `zs check` passes, ZSpace macOS client logged in
 - Generic file ops on ZSpace via the [`zspace-nas`](https://github.com/skyzhao1223/zspace-cli/tree/main/skills/zspace-nas) skill (ships with zspace-cli)
 
 ## Workflow
@@ -46,7 +46,7 @@ Zone folder names are configurable (`--movie-zone` / `--series-zone`) to match y
 ### Step 1: Scan
 
 ```bash
-# Local (mm-scan needs `pip install media-manager-skill`; or run the in-repo script)
+# Local (mm-scan needs `pip install "media-manager-skill @ git+https://github.com/skyzhao1223/media-manager-skill.git"`; or run the in-repo script)
 mm-scan --source local /path/to/library
 python scripts/scan.py --source local /path/to/library
 

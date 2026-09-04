@@ -39,14 +39,11 @@
 
 ## 安装
 
+需要 **Python 3.9+**（已在 3.9–3.13 测试）。
+
 ```bash
 pip install media-manager-skill          # 本地模式，零依赖
 pip install "media-manager-skill[zspace]"  # 极空间模式（带上 zspace-cli）
-> **注意**：需要 Python ≥3.9。
-
-```bash
-pip install "media-manager-skill[zspace]"   # 极空间模式（带上 zspace-cli）
-pip install media-manager-skill             # 本地模式，零依赖
 
 # 命令行入口
 mm-scan --source local /path/to/影视

@@ -7,6 +7,8 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/media-manager-skill?cacheSeconds=3600)](https://pypi.org/project/media-manager-skill/)
 [![PyPI - Python](https://img.shields.io/pypi/pyversions/media-manager-skill?cacheSeconds=3600)](https://pypi.org/project/media-manager-skill/)
 [![CI](https://github.com/skyzhao1223/media-manager-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/skyzhao1223/media-manager-skill/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/media-manager-skill)](https://pypi.org/project/media-manager-skill/)
+[![Python](https://img.shields.io/pypi/pyversions/media-manager-skill)](https://pypi.org/project/media-manager-skill/)
 
 </div>
 
@@ -53,6 +55,8 @@ The `cn` profile defaults to `电影` and `剧集`; the `plex` profile defaults 
 ```bash
 pip install media-manager-skill            # local mode, zero deps
 pip install "media-manager-skill[zspace]"  # ZSpace mode (bundles zspace-cli)
+pip install "media-manager-skill[zspace]"   # with ZSpace NAS support
+pip install media-manager-skill             # local mode, zero deps
 
 # CLI entry point
 mm-scan --source local /path/to/library

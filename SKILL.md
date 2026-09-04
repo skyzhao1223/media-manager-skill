@@ -47,6 +47,7 @@ Zone folder names are configurable (`--movie-zone` / `--series-zone`) to match y
 
 ```bash
 # Local (mm-scan needs `pip install media-manager-skill`; or run the in-repo script)
+# Local (mm-scan needs `pip install "media-manager-skill[zspace]"` or `pip install media-manager-skill`; or run the in-repo script)
 mm-scan --source local /path/to/library
 python scripts/scan.py --source local /path/to/library
 

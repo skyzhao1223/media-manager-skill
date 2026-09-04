@@ -4,6 +4,10 @@
 
 [English](README.md) · **简体中文**
 
+[![CI](https://github.com/skyzhao1223/media-manager-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/skyzhao1223/media-manager-skill/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/media-manager-skill)](https://pypi.org/project/media-manager-skill/)
+[![Python](https://img.shields.io/pypi/pyversions/media-manager-skill)](https://pypi.org/project/media-manager-skill/)
+
 </div>
 
 **影视库命名扫描与整理 Agent Skill** — 深度扫描 + `old→new` 预览 + rename/move。**本地影音库、云盘（网盘）、各类 NAS（极空间 / 群晖 / 威联通 / 绿联 / 铁威马 / 华芸 / 西部数据 / 联想 / 海康威视 / TrueNAS / Unraid / OpenMediaVault …）都支持**，并且面向全球用户：内置中文（`cn`）与英文/Plex（`plex`）两套命名规范、多语言输出、库目录可配置。
@@ -38,6 +42,11 @@
 ```bash
 pip install media-manager-skill          # 本地模式，零依赖
 pip install "media-manager-skill[zspace]"  # 极空间模式（带上 zspace-cli）
+> **注意**：需要 Python ≥3.9。
+
+```bash
+pip install "media-manager-skill[zspace]"   # 极空间模式（带上 zspace-cli）
+pip install media-manager-skill             # 本地模式，零依赖
 
 # 命令行入口
 mm-scan --source local /path/to/影视

@@ -7,8 +7,6 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/media-manager-skill?cacheSeconds=3600)](https://pypi.org/project/media-manager-skill/)
 [![PyPI - Python](https://img.shields.io/pypi/pyversions/media-manager-skill?cacheSeconds=3600)](https://pypi.org/project/media-manager-skill/)
 [![CI](https://github.com/skyzhao1223/media-manager-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/skyzhao1223/media-manager-skill/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/media-manager-skill)](https://pypi.org/project/media-manager-skill/)
-[![Python](https://img.shields.io/pypi/pyversions/media-manager-skill)](https://pypi.org/project/media-manager-skill/)
 
 </div>
 
